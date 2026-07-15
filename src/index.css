@@ -1,0 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Kumbh+Sans:wght,YOPQ@100..900,300&family=Varela+Round&family=Work+Sans:ital,wght@0,100..900;1,100..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Kumbh Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Varela Round", sans-serif;
+  --font-work: "Work Sans", sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Taita Taveta Resolution Tracker",
+  "description": "County Assembly Resolution Tracker for the County Government of Taita Taveta, managing implementation status, tracking processing times, and assigning tasks across departments.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

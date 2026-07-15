@@ -1,0 +1,119 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// To migrate from SQLite to PostgreSQL or MariaDB:
+// 1. Change the provider below to "postgresql" or "mysql"
+// 2. Update your DATABASE_URL in the .env file to match the connection string.
+// 3. Run: npx prisma db push
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  name          String
+  password      String   // Added secure password field as requested
+  phone         String?  // Phone number for Tilil SMS OTP delivery
+  role          String   // e.g., MCA, Clerk, Clerk Assistant, ICT Officer, etc.
+  departmentId  String?
+  directorateId String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model OTP {
+  id        String   @id @default(uuid())
+  email     String
+  phone     String
+  code      String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Resolution {
+  id                     String             @id @default(uuid())
+  referenceNumber        String             @unique
+  title                  String
+  description            String
+  status                 String             @default("Draft")
+  datePassed             String
+  implementationTimeDays Int
+  dueDate                String?
+  departmentId           String?
+  committeeId            String?
+  directorateId          String?
+  createdAt              DateTime           @default(now())
+  createdBy              String             // User ID
+  approvedAt             DateTime?
+  approvedBy             String?            // User ID
+  assignedAt             DateTime?
+  assignedBy             String?            // User ID
+  documents              Document[]
+  comments               Comment[]
+  executiveUpdates       ExecutiveUpdate[]
+}
+
+model Document {
+  id           String     @id @default(uuid())
+  name         String
+  url          String
+  categoryId   String
+  uploadedAt   DateTime   @default(now())
+  uploadedBy   String     // User ID or name
+  resolutionId String
+  resolution   Resolution @relation(fields: [resolutionId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id           String     @id @default(uuid())
+  text         String
+  authorId     String
+  authorName   String
+  createdAt    DateTime   @default(now())
+  resolutionId String
+  resolution   Resolution @relation(fields: [resolutionId], references: [id], onDelete: Cascade)
+}
+
+model ExecutiveUpdate {
+  id             String     @id @default(uuid())
+  authorId       String
+  authorName     String
+  authorRole     String
+  text           String
+  proposedStatus String?
+  approvalStatus String     @default("Pending CCO") // Pending CCO | Pending Liaison | Approved | Rejected
+  createdAt      DateTime   @default(now())
+  approvedAt     DateTime?
+  approvedBy     String?
+  resolutionId   String
+  resolution     Resolution @relation(fields: [resolutionId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String
+  userName    String
+  userRole    String
+  action      String   // e.g. Create, Edit, Delete, Login, etc.
+  entityType  String   // e.g. Resolution, Document, User, System
+  entityId    String?
+  details     String
+  apiEndpoint String?
+  apiMethod   String?
+  timestamp   DateTime @default(now())
+}
+
+model SystemItem {
+  id        String   @id @default(uuid())
+  type      String   // e.g. departments, committees, directorates, docCategories, statusCategories
+  name      String
+  meta      String?  // JSON metadata string for things like badgeClass, isActive, etc.
+  createdAt DateTime @default(now())
+}
