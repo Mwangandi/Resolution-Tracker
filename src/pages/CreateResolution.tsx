@@ -9,7 +9,7 @@ export function CreateResolution() {
   const appContext = useAppContext();
   const { createResolution, currentUser } = appContext;
 
-  if (!currentUser || !['County Assembly Clerk', 'Assistant County Assembly Clerk', 'System Administrator', 'ICT Director'].includes(currentUser.role)) {
+  if (!currentUser || !['County Assembly Clerk', 'Assistant County Assembly Clerk', 'System Administrator', 'ICT Director', 'MCA', 'Committee Clerk'].includes(currentUser.role)) {
     return (
       <div className="p-6 text-center text-slate-500 font-sans">
         You do not have permission to register new resolutions.
@@ -58,10 +58,27 @@ export function CreateResolution() {
     setSelectedCommittees(selectedCommittees.filter(id => id !== commId));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmitWithStatus = (status: 'Draft' | 'Pending Approval') => {
+    if (!formData.title.trim()) {
+      alert('Please provide a resolution title');
+      return;
+    }
+    if (selectedDepartments.length === 0) {
+      alert('Please select at least one Target Department');
+      return;
+    }
+    if (selectedCommittees.length === 0) {
+      alert('Please select at least one Oversight Committee');
+      return;
+    }
+    if (formData.implementationTimeDays < 1 || formData.implementationTimeDays > 60) {
+      alert('Implementation timeline must be between 1 and 60 days');
+      return;
+    }
+
     createResolution({
       ...formData,
+      status,
       departmentId: selectedDepartments.join(','),
       committeeId: selectedCommittees.join(','),
       documents: documents.map(doc => ({
@@ -83,17 +100,19 @@ export function CreateResolution() {
   };
 
   const handleAddDocument = () => {
-    setDocuments([...documents, { name: '', url: '#', categoryId: docCategories[0]?.id }]);
+    setDocuments(prev => [...prev, { name: '', url: '#', categoryId: docCategories[0]?.id }]);
   };
 
   const handleDocumentChange = (index: number, field: keyof ResolutionDocument, value: string) => {
-    const updated = [...documents];
-    updated[index] = { ...updated[index], [field]: value };
-    setDocuments(updated);
+    setDocuments(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
   };
 
   const handleRemoveDocument = (index: number) => {
-    setDocuments(documents.filter((_, i) => i !== index));
+    setDocuments(prev => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -103,7 +122,7 @@ export function CreateResolution() {
       </div>
 
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
-        <form onSubmit={handleSubmit} className="space-y-6 p-6">
+        <form onSubmit={(e) => e.preventDefault()} className="space-y-6 p-6">
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
@@ -302,7 +321,7 @@ export function CreateResolution() {
 
             <div>
               <label htmlFor="implementationTimeDays" className="block text-sm font-medium text-gray-700">
-                Implementation Time (Days)
+                Implementation Time (Days) - Maximum 60 Days
               </label>
               <div className="mt-1">
                 <input
@@ -311,10 +330,12 @@ export function CreateResolution() {
                   id="implementationTimeDays"
                   required
                   min="1"
+                  max="60"
                   className="shadow-sm focus:ring-orange-500 focus:border-orange-500 block w-full sm:text-sm border-gray-300 rounded-md py-2 px-3 border"
                   value={formData.implementationTimeDays}
                   onChange={handleChange}
                 />
+                <span className="text-xs text-slate-500 mt-1 block">Customize implementation timeline (up to 60 days)</span>
               </div>
             </div>
           </div>
@@ -339,14 +360,15 @@ export function CreateResolution() {
                   <div key={index} className="flex items-start gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
                     <div className="flex-1 space-y-3">
                       <div>
-                        <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Document Name</label>
+                        <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">
+                          Document Description / Note <span className="text-gray-400 font-normal capitalize">(Optional - describes document contents)</span>
+                        </label>
                         <input
                           type="text"
-                          required
-                          value={doc.name}
-                          onChange={(e) => handleDocumentChange(index, 'name', e.target.value)}
-                          className="block w-full sm:text-sm border-gray-300 rounded-md py-1.5 px-3 border focus:ring-orange-500 focus:border-orange-500"
-                          placeholder="e.g. Approved Resolution Scan"
+                          value={doc.description || ''}
+                          onChange={(e) => handleDocumentChange(index, 'description', e.target.value)}
+                          className="block w-full sm:text-sm border-gray-300 rounded-md py-1.5 px-3 border focus:ring-orange-500 focus:border-orange-500 bg-white"
+                          placeholder="e.g. Official Signed Hansard Copy, Minutes of Committee Meeting..."
                         />
                       </div>
                       <div className="flex gap-3">
@@ -363,17 +385,48 @@ export function CreateResolution() {
                           </select>
                         </div>
                         <div className="flex-1">
-                          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Upload File</label>
+                          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Attach Document File</label>
                           <div className="flex items-center gap-2">
-                          <label className="flex items-center justify-center w-full py-1.5 px-3 border border-dashed border-gray-400 rounded-md text-sm text-gray-600 hover:bg-gray-50 bg-white cursor-pointer">
-                              <Upload className="h-4 w-4 mr-2 text-gray-400" />
-                              Choose File...
+                            <label className={`flex items-center justify-center w-full py-2 px-3 border border-dashed rounded-lg text-sm transition-all cursor-pointer overflow-hidden ${doc.fileName ? 'border-emerald-300 bg-emerald-50/70 text-emerald-800' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                              {doc.fileName ? (
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                  <span className="text-xs font-bold text-emerald-800 truncate">{doc.fileName}</span>
+                                  {doc.fileName.includes('.') && (
+                                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 bg-emerald-200/80 text-emerald-900 rounded font-black shrink-0">
+                                      {doc.fileName.split('.').pop()}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="flex items-center text-xs font-medium text-slate-600">
+                                  <Upload className="h-4 w-4 mr-2 text-slate-400 shrink-0" />
+                                  <span className="truncate">Choose File (PDF, Word, Excel, etc)...</span>
+                                </div>
+                              )}
                               <input 
                                 type="file" 
-                                className="sr-only" 
+                                className="sr-only"
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*"
                                 onChange={(e) => {
-                                  if (e.target.files?.[0] && !doc.name) {
-                                    handleDocumentChange(index, 'name', e.target.files[0].name);
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      const dataUrl = reader.result as string;
+                                      setDocuments(prev => {
+                                        const updated = [...prev];
+                                        const curr = updated[index] || {};
+                                        updated[index] = {
+                                          ...curr,
+                                          fileName: file.name,
+                                          name: curr.description || file.name,
+                                          url: dataUrl
+                                        };
+                                        return updated;
+                                      });
+                                    };
+                                    reader.readAsDataURL(file);
                                   }
                                 }} 
                               />
@@ -409,11 +462,20 @@ export function CreateResolution() {
               Cancel
             </button>
             <button
-              type="submit"
-              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+              type="button"
+              onClick={() => handleSubmitWithStatus('Draft')}
+              className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
             >
               <Save className="mr-2 h-4 w-4" />
-              Register
+              Save Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSubmitWithStatus('Pending Approval')}
+              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Submit for Approval
             </button>
           </div>
         </form>

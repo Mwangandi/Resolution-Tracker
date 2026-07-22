@@ -3,6 +3,15 @@ import { PrismaService } from './prisma.service';
 import { SmsService } from './sms.service';
 import { FrappeService } from './frappe.service';
 
+function safeParseJson(str: string | null | undefined, fallback: any = {}) {
+  if (!str) return fallback;
+  try {
+    return JSON.parse(str);
+  } catch {
+    return fallback;
+  }
+}
+
 @Controller('api/auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -60,12 +69,20 @@ export class AuthController {
     }
     */
 
-    if (user.role === 'System Administrator') {
-      this.logger.log(`[AUTH] OTP bypassed for System Administrator: ${normalizedEmail}`);
+    const otpSkipSetting = await this.prisma.systemItem.findFirst({
+      where: {
+        type: 'settings',
+        name: 'system_wide_otp_skip',
+      }
+    });
+    const isOtpSkipEnabled = otpSkipSetting ? safeParseJson(otpSkipSetting.meta, {}).enabled === true : false;
+
+    if (user.role === 'System Administrator' || isOtpSkipEnabled) {
+      this.logger.log(`[AUTH] OTP bypassed for ${normalizedEmail} (System Administrator or System-Wide Bypass Active)`);
       return {
         success: true,
         otpBypassed: true,
-        message: 'OTP bypass active for System Administrator',
+        message: 'OTP bypass active',
       };
     }
 
@@ -141,8 +158,16 @@ export class AuthController {
 
     // Verify OTP
     const isSysAdmin = user.role === 'System Administrator';
-    if (isSysAdmin && otp === 'BYPASS_OTP') {
-      this.logger.log(`[AUTH] OTP bypass validated successfully for System Administrator: ${normalizedEmail}`);
+    const otpSkipSetting = await this.prisma.systemItem.findFirst({
+      where: {
+        type: 'settings',
+        name: 'system_wide_otp_skip',
+      }
+    });
+    const isOtpSkipEnabled = otpSkipSetting ? safeParseJson(otpSkipSetting.meta, {}).enabled === true : false;
+
+    if ((isSysAdmin || isOtpSkipEnabled) && otp === 'BYPASS_OTP') {
+      this.logger.log(`[AUTH] OTP bypass validated successfully: ${normalizedEmail}`);
     } else {
       const validOtp = await this.prisma.oTP.findFirst({
         where: {
@@ -177,6 +202,90 @@ export class AuthController {
         departmentId: user.departmentId,
         directorateId: user.directorateId,
       },
+    };
+  }
+
+  @Post('test-sms-otp')
+  async testSmsOtp(@Body() body: { phone?: string }) {
+    const { phone } = body;
+    if (!phone) {
+      throw new HttpException('Phone number is required', HttpStatus.BAD_REQUEST);
+    }
+
+    const sanitizedPhone = phone.trim();
+    if (!sanitizedPhone) {
+      throw new HttpException('Invalid phone number', HttpStatus.BAD_REQUEST);
+    }
+
+    // Generate a secure 6-digit OTP
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
+
+    // Save the OTP to the database
+    await this.prisma.oTP.create({
+      data: {
+        email: 'test-registration-otp',
+        phone: sanitizedPhone,
+        code,
+        expiresAt,
+      },
+    });
+
+    this.logger.log(`[TEST-AUTH] Generated test OTP ${code} for phone ${sanitizedPhone}`);
+
+    // Send the OTP via SMS
+    const message = `Taita Taveta Resolution Tracker: Your mobile test verification code is ${code}. It expires in 5 minutes.`;
+    const smsSent = await this.sms.sendSms(sanitizedPhone, message);
+
+    if (!smsSent) {
+      throw new HttpException('Failed to send SMS OTP. Please check the phone number.', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    return {
+      success: true,
+      message: `Test OTP sent successfully to ${sanitizedPhone}`,
+    };
+  }
+
+  @Post('verify-test-otp')
+  async verifyTestOtp(@Body() body: { phone?: string; code?: string }) {
+    const { phone, code } = body;
+    if (!phone || !code) {
+      throw new HttpException('Phone and code are required', HttpStatus.BAD_REQUEST);
+    }
+
+    const sanitizedPhone = phone.trim();
+
+    // Verify OTP
+    const validOtp = await this.prisma.oTP.findFirst({
+      where: {
+        email: 'test-registration-otp',
+        phone: sanitizedPhone,
+        code: code.trim(),
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    if (!validOtp) {
+      throw new HttpException('Invalid or expired verification code', HttpStatus.UNAUTHORIZED);
+    }
+
+    // Cleanup verified OTP
+    await this.prisma.oTP.deleteMany({
+      where: { 
+        email: 'test-registration-otp',
+        phone: sanitizedPhone 
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Mobile number verified successfully!',
     };
   }
 }

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../store';
 import { Role } from '../types';
-import { Building2, FileText, CheckCircle, Users, Plus, Pencil, Trash2, X, Check, ShieldAlert } from 'lucide-react';
+import { Building2, FileText, CheckCircle, Users, Plus, Pencil, Trash2, X, Check, ShieldAlert, Image, Upload } from 'lucide-react';
 import { clsx } from 'clsx';
+// @ts-ignore
+import taitaTavetaLogo from '../assets/images/taita_taveta_logo_1784192264343.jpg';
 
 export function SystemSettings() {
   const { 
@@ -16,7 +18,9 @@ export function SystemSettings() {
     users,
     createUser,
     updateUser,
-    deleteUser
+    deleteUser,
+    customLogo,
+    updateCustomLogo
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<string>('departments');
@@ -71,6 +75,7 @@ export function SystemSettings() {
     { id: 'committees', name: 'Committees', icon: Users, count: committees.filter(c => c.isActive !== false).length },
     { id: 'docCategories', name: 'Doc Categories', icon: FileText, count: docCategories.filter(d => d.isActive !== false).length },
     { id: 'statusCategories', name: 'Status Categories', icon: CheckCircle, count: statusCategories.filter(s => s.isActive !== false).length },
+    { id: 'customLogo', name: 'Custom Logo', icon: Image, count: customLogo ? 1 : 0 }
   ];
 
   const getCurrentList = () => {
@@ -325,6 +330,159 @@ export function SystemSettings() {
     'ICT Director',
   ];
 
+  const LogoSettingsTab = () => {
+    const isSysAdmin = currentUser?.role === 'System Administrator';
+    const [logoBase64, setLogoBase64] = useState<string | null>(customLogo);
+    const [saving, setSaving] = useState(false);
+    const [dragActive, setDragActive] = useState(false);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setLogoBase64(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+
+    const handleDrag = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.type === "dragenter" || e.type === "dragover") {
+        setDragActive(true);
+      } else if (e.type === "dragleave") {
+        setDragActive(false);
+      }
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
+      
+      const file = e.dataTransfer.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setLogoBase64(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+
+    const handleSave = async () => {
+      setSaving(true);
+      const success = await updateCustomLogo(logoBase64);
+      setSaving(false);
+      if (success) {
+        alert('Custom logo updated successfully system-wide!');
+      } else {
+        alert('Failed to update custom logo.');
+      }
+    };
+
+    const handleReset = async () => {
+      if (window.confirm('Are you sure you want to reset the logo to the default Taita Taveta County Logo?')) {
+        setSaving(true);
+        const success = await updateCustomLogo(null);
+        setSaving(false);
+        if (success) {
+          setLogoBase64(null);
+          alert('System logo reset to default successfully!');
+        } else {
+          alert('Failed to reset system logo.');
+        }
+      }
+    };
+
+    return (
+      <div className="space-y-6 max-w-2xl font-sans">
+        <div>
+          <h2 className="text-lg font-bold text-slate-800">Custom System Logo</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Upload a custom county logo that applies system-wide across headers, login page, and PDF exports.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+          <div className="col-span-12 md:col-span-4 flex flex-col items-center justify-center p-4 border border-slate-200 rounded-xl bg-slate-50/50">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Logo Preview</span>
+            <div className="w-32 h-32 bg-white rounded-2xl flex items-center justify-center p-2 shadow-md border border-slate-100 overflow-hidden">
+              <img 
+                src={logoBase64 || taitaTavetaLogo} 
+                alt="System Logo Preview" 
+                className="w-full h-full object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <span className="text-[10px] font-semibold text-slate-500 mt-3">
+              {logoBase64 ? 'Custom Logo Active' : 'Default Logo Active'}
+            </span>
+          </div>
+
+          <div className="col-span-12 md:col-span-8 space-y-4">
+            {isSysAdmin ? (
+              <div 
+                className={clsx(
+                  "border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer",
+                  dragActive ? "border-orange-500 bg-orange-50/30" : "border-slate-300 hover:border-slate-400 bg-white"
+                )}
+                onDragEnter={handleDrag}
+                onDragOver={handleDrag}
+                onDragLeave={handleDrag}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById('logo-file-input')?.click()}
+              >
+                <Upload className="mx-auto h-8 w-8 text-slate-400 hover:scale-110 transition-transform" />
+                <p className="mt-2 text-sm font-semibold text-slate-700">Drag & Drop Logo Image here</p>
+                <p className="text-xs text-slate-500 mt-1">Or click to select a file from your device (PNG, JPG, or SVG)</p>
+                <input 
+                  id="logo-file-input"
+                  type="file" 
+                  className="sr-only" 
+                  accept="image/*"
+                  onChange={handleFileChange}
+                />
+              </div>
+            ) : (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs leading-relaxed font-medium flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold">Access Restricted:</span> Only the <span className="font-bold">System Administrator</span> is allowed to upload or change the custom logo.
+                </div>
+              </div>
+            )}
+
+            {isSysAdmin && (
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving || logoBase64 === customLogo}
+                  className="inline-flex items-center justify-center px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 shadow-md shadow-orange-600/10 cursor-pointer transition-colors"
+                >
+                  Save Logo Changes
+                </button>
+                {customLogo && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    disabled={saving}
+                    className="inline-flex items-center justify-center px-4 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl text-slate-700 bg-slate-100 hover:bg-slate-200 cursor-pointer transition-colors"
+                  >
+                    Reset to Default
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div>
@@ -370,7 +528,9 @@ export function SystemSettings() {
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden min-h-[500px]">
         {/* Content Area */}
         <div className="flex-1 p-6 bg-white font-sans">
-          {activeTab === 'users' ? (
+          {activeTab === 'customLogo' ? (
+            <LogoSettingsTab />
+          ) : activeTab === 'users' ? (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -379,10 +539,10 @@ export function SystemSettings() {
                 </div>
                 <button
                   onClick={handleOpenAddUser}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-md shadow-orange-600/10 hover:shadow-lg hover:shadow-orange-600/20 active:scale-95 hover:scale-[1.02] transition-all duration-200 cursor-pointer"
                 >
-                  <Plus className="mr-1 h-4 w-4" />
-                  Add User
+                  <Plus className="h-4 w-4 stroke-[3]" />
+                  <span>Add User</span>
                 </button>
               </div>
 
@@ -583,10 +743,22 @@ export function SystemSettings() {
                 </h2>
                 <button
                   onClick={() => setIsAdding(true)}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent shadow-sm text-xs font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-md shadow-orange-600/10 hover:shadow-lg hover:shadow-orange-600/20 active:scale-95 hover:scale-[1.02] transition-all duration-200 cursor-pointer"
                 >
-                  <Plus className="mr-1 h-4 w-4" />
-                  Add New
+                  <Plus className="h-4 w-4 stroke-[3]" />
+                  <span>
+                    {activeTab === 'departments' 
+                      ? 'Add Department' 
+                      : activeTab === 'committees' 
+                      ? 'Add Committee' 
+                      : activeTab === 'directorates' 
+                      ? 'Add Directorate' 
+                      : activeTab === 'docCategories' 
+                      ? 'Add Category' 
+                      : activeTab === 'statusCategories' 
+                      ? 'Add Status' 
+                      : 'Add New'}
+                  </span>
                 </button>
               </div>
 
@@ -983,7 +1155,7 @@ export function SystemSettings() {
                             </div>
 
                             {/* Actions panel */}
-                            <div className="flex items-center gap-2 self-end sm:self-auto sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-2 self-end sm:self-auto transition-opacity opacity-100">
                               {activeTab === 'committees' && (
                                 <button 
                                   onClick={() => handleOpenMembersModal(item)} 
@@ -1035,7 +1207,7 @@ export function SystemSettings() {
 
       {/* User Form Modal */}
       {userModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900 bg-opacity-50 overflow-y-auto font-sans">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto font-sans animate-fade-in">
           <div className="bg-white rounded-xl shadow-xl border border-slate-200 max-w-md w-full overflow-hidden">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-800">
@@ -1180,22 +1352,26 @@ export function SystemSettings() {
 
       {/* Committee Members Modal */}
       {membersModalOpen && selectedCommitteeForMembers && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900 bg-opacity-60 overflow-y-auto font-sans backdrop-blur-xs">
-          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto font-sans">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-gradient-to-r from-teal-500/10 to-emerald-500/10 border-b border-slate-200 flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                  <Users className="w-5 h-5 text-teal-600" />
-                  <span>Manage Committee Members</span>
-                </h3>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Committee: <span className="text-teal-700 font-bold">{selectedCommitteeForMembers.name}</span>
-                </p>
+            <div className="px-6 py-5 bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent border-b border-slate-150 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-orange-100/60 rounded-xl text-orange-600">
+                  <Users className="w-5 h-5 stroke-[2.5]" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-800">
+                    Manage Committee Members
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Committee: <span className="text-orange-600 font-bold">{selectedCommitteeForMembers.name}</span>
+                  </p>
+                </div>
               </div>
               <button 
                 onClick={() => setMembersModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 transition-colors"
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1203,23 +1379,25 @@ export function SystemSettings() {
 
             {/* Modal Content */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {/* Info banner */}
-              <div className="p-3 bg-teal-50/50 border border-teal-100 rounded-lg text-xs text-teal-800 leading-relaxed font-medium">
-                💡 <span className="font-semibold text-teal-900">Note:</span> The Committee Chairman and Clerk/Secretary are registered primary officers. To assign a different Chairman or Clerk, please modify the Committee's main details in the main settings tab.
-              </div>
-
               {/* Members List Table */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Current Members List</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Current Members List</h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                    {(selectedCommitteeForMembers.members || []).length + 
+                     (selectedCommitteeForMembers.headUserId ? 1 : 0) + 
+                     (selectedCommitteeForMembers.clerkUserId ? 1 : 0)} Total
+                  </span>
+                </div>
                 
-                <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/40">
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/30">
                   <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-100">
+                    <thead className="bg-slate-50">
                       <tr>
-                        <th className="px-4 py-2.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wide">Member Name</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wide">System Role</th>
-                        <th className="px-4 py-2.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wide">Committee Designation</th>
-                        <th className="px-4 py-2.5 text-right text-xs font-bold text-slate-600 uppercase tracking-wide">Action</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wide">Member Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wide">System Role</th>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-slate-600 uppercase tracking-wide">Designation</th>
+                        <th className="px-4 py-3 text-right text-xs font-bold text-slate-600 uppercase tracking-wide">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 bg-white">
@@ -1241,8 +1419,8 @@ export function SystemSettings() {
                         if (resolvedMembers.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={4} className="px-4 py-8 text-center text-slate-400 italic">
-                                No members added yet.
+                              <td colSpan={4} className="px-4 py-10 text-center text-slate-400 italic font-medium">
+                                No members added yet. Use the form below to add members.
                               </td>
                             </tr>
                           );
@@ -1256,7 +1434,7 @@ export function SystemSettings() {
                           const isClerk = member.userId === selectedCommitteeForMembers.clerkUserId;
 
                           return (
-                            <tr key={`${member.userId}-${idx}`} className="hover:bg-slate-50/50 transition-colors">
+                            <tr key={`${member.userId}-${idx}`} className="hover:bg-slate-50/60 transition-colors">
                               <td className="px-4 py-3 font-semibold text-slate-800">
                                 {mUser.name}
                               </td>
@@ -1265,29 +1443,29 @@ export function SystemSettings() {
                               </td>
                               <td className="px-4 py-3">
                                 {isChairman ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60 shadow-3xs">
                                     👑 Chairman
                                   </span>
                                 ) : isClerk ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-3xs">
                                     📋 Clerk / Secretary
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200/60">
                                     {member.position}
                                   </span>
                                 )}
                               </td>
                               <td className="px-4 py-3 text-right">
                                 {isChairman || isClerk ? (
-                                  <span className="text-[10px] font-medium text-slate-400 select-none">
-                                    Primary Officer
+                                  <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase select-none mr-2">
+                                    Primary
                                   </span>
                                 ) : (
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveMember(member.userId)}
-                                    className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                                    className="inline-flex items-center gap-1 text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100/80 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                     <span>Remove</span>
@@ -1305,7 +1483,7 @@ export function SystemSettings() {
 
               {/* Add New Member Section */}
               <div className="border-t border-slate-200 pt-6 space-y-4">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Add Committee Member</h4>
+                <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Add Committee Member</h4>
                 
                 {membersError && (
                   <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-700 rounded-lg flex items-center gap-2 font-medium">
@@ -1323,7 +1501,7 @@ export function SystemSettings() {
                         setNewMemberUserId(e.target.value);
                         setMembersError(null);
                       }}
-                      className="block w-full sm:text-sm border-slate-300 rounded-lg py-2 px-3 border focus:ring-teal-500 focus:border-teal-500 bg-white font-medium"
+                      className="block w-full text-sm border-slate-300 rounded-lg py-2 px-3 border focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white font-medium text-slate-800"
                     >
                       <option value="">Select User Account...</option>
                       {users
@@ -1352,8 +1530,8 @@ export function SystemSettings() {
                         setNewMemberPosition(e.target.value);
                         setMembersError(null);
                       }}
-                      placeholder="e.g. Vice-Chairman, Ex-Officio"
-                      className="block w-full sm:text-sm border-slate-300 rounded-lg py-2 px-3 border focus:ring-teal-500 focus:border-teal-500 font-medium"
+                      placeholder="e.g. Vice-Chairman"
+                      className="block w-full text-sm border-slate-300 rounded-lg py-2 px-3 border focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 font-medium text-slate-800 placeholder-slate-400 bg-white"
                     />
                   </div>
 
@@ -1361,16 +1539,16 @@ export function SystemSettings() {
                     <button
                       type="button"
                       onClick={handleAddMember}
-                      className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 border border-transparent text-sm font-semibold rounded-lg text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 shadow-sm cursor-pointer transition-colors"
+                      className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg text-white bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-md shadow-orange-600/10 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 cursor-pointer transition-all duration-200"
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-4 h-4 stroke-[3]" />
                       <span>Add</span>
                     </button>
                   </div>
                 </div>
 
                 {/* Suggestions quick Pills */}
-                <div className="flex flex-wrap items-center gap-2 pb-2">
+                <div className="flex flex-wrap items-center gap-2 pb-1">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Quick Designations:</span>
                   {['Member', 'Vice-Chairman', 'Ex-Officio Member', 'Liaison Officer', 'Co-opted Member'].map((pos) => (
                     <button
@@ -1381,10 +1559,10 @@ export function SystemSettings() {
                         setMembersError(null);
                       }}
                       className={clsx(
-                        "px-2 py-1 text-[10px] font-semibold rounded-full border cursor-pointer transition-all shadow-3xs",
+                        "px-2.5 py-1 text-[10px] font-bold rounded-full border cursor-pointer transition-all duration-150 shadow-3xs",
                         newMemberPosition === pos 
-                          ? "bg-teal-50 text-teal-700 border-teal-200 animate-pulse" 
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          ? "bg-orange-50 text-orange-700 border-orange-200 ring-2 ring-orange-500/10" 
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
                       )}
                     >
                       {pos}
@@ -1395,11 +1573,11 @@ export function SystemSettings() {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setMembersModalOpen(false)}
-                className="px-4 py-2 bg-white border border-slate-300 text-sm font-semibold rounded-lg text-slate-700 hover:bg-slate-50 focus:outline-none transition-colors cursor-pointer shadow-3xs"
+                className="px-5 py-2.5 bg-white border border-slate-300 text-xs font-bold uppercase tracking-wider rounded-xl text-slate-700 hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all cursor-pointer shadow-sm"
               >
                 Done
               </button>

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router';
 import { useAppContext } from '../../store';
+// @ts-ignore
+import taitaTavetaLogo from '../../assets/images/taita_taveta_logo_1784192264343.jpg';
 import {
   LayoutDashboard,
   FileText,
@@ -13,16 +15,32 @@ import {
   Shield,
   Settings,
   Users,
-  Check
+  Check,
+  Database
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export function AppLayout() {
-  const { currentUser, logout, resolutions, auditLogs, logAudit } = useAppContext();
+  const { currentUser, logout, resolutions, auditLogs, logAudit, customLogo, searchTerm, setSearchTerm } = useAppContext();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    }
+    if (notificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notificationsOpen]);
 
   // Client-side persistence for read notifications
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
@@ -53,6 +71,9 @@ export function AppLayout() {
           return false;
         }
         if (log.action === 'Delete' && log.entityType === 'Resolution') {
+          return false;
+        }
+        if (log.action === 'View') {
           return false;
         }
         return resolutions.some(res => res.id === log.entityId);
@@ -191,6 +212,9 @@ export function AppLayout() {
     ...(['ICT', 'System Administrator', 'ICT Director'].includes(currentUser.role)
       ? [{ name: 'User Management', href: '/users', icon: Users }] 
       : []),
+    ...(currentUser.role === 'System Administrator'
+      ? [{ name: 'Database Connection', href: '/database-connection', icon: Database }] 
+      : []),
     ...(['ICT', 'System Administrator', 'ICT Director'].includes(currentUser.role)
       ? [{ name: 'Audit Logs', href: '/audit-logs', icon: Activity }] 
       : []),
@@ -213,8 +237,13 @@ export function AppLayout() {
       )}>
         <div className="p-6 border-b border-orange-500/50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center font-bold text-orange-600 shadow-inner">
-              TT
+            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center p-0.5 shadow-md overflow-hidden shrink-0">
+              <img 
+                src={customLogo || taitaTavetaLogo} 
+                alt="Taita Taveta County Logo" 
+                className="w-full h-full object-contain"
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
               <h1 className="text-white font-bold text-sm leading-tight uppercase tracking-wider">Taita Taveta</h1>
@@ -231,22 +260,23 @@ export function AppLayout() {
           <div className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname.startsWith(item.href);
+              const isActive = location.pathname === item.href || (location.pathname.startsWith(item.href) && item.href !== '/');
               return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={clsx(
-                    "flex items-center gap-3 px-6 py-3 transition-colors",
-                    isActive 
-                      ? "bg-white/10 text-white border-l-4 border-yellow-400 font-medium" 
-                      : "text-orange-100 hover:bg-white/5 border-l-4 border-transparent"
-                  )}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {item.name}
-                </Link>
+                <React.Fragment key={item.name}>
+                  <Link
+                    to={item.href}
+                    className={clsx(
+                      "flex items-center gap-3 px-6 py-3 transition-colors",
+                      isActive 
+                        ? "bg-white/10 text-white border-l-4 border-yellow-400 font-medium" 
+                        : "text-orange-100 hover:bg-white/5 border-l-4 border-transparent"
+                    )}
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <Icon className="w-5 h-5 flex-shrink-0" />
+                    <span className="flex-1">{item.name}</span>
+                  </Link>
+                </React.Fragment>
               );
             })}
           </div>
@@ -293,14 +323,21 @@ export function AppLayout() {
               </span>
               <input 
                 type="text" 
-                placeholder="Search by Resolution # (e.g. TTCA/CS/7/VOL.8/(001))" 
+                placeholder="Search by Reference Number or Title..." 
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  if (location.pathname !== '/resolutions' && !location.pathname.startsWith('/resolutions/')) {
+                    navigate('/resolutions');
+                  }
+                }}
                 className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
           </div>
           
           <div className="flex items-center gap-6 ml-4">
-            <div className="relative">
+            <div className="relative" ref={notificationsRef}>
               <button 
                 className="text-slate-500 hover:text-slate-700 focus:outline-none relative p-1"
                 onClick={() => setNotificationsOpen(!notificationsOpen)}
@@ -314,7 +351,7 @@ export function AppLayout() {
               </button>
               
               {notificationsOpen && (
-                <div className="origin-top-right absolute right-0 mt-2 w-80 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 z-50">
+                <div className="origin-top-right absolute right-0 mt-2 w-96 md:w-[480px] rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-gray-100 z-50">
                   <div className="px-4 py-3 flex items-center justify-between bg-slate-50 rounded-t-md">
                     <p className="text-xs text-gray-900 font-bold uppercase tracking-wider">Notifications</p>
                     {realNotifications.filter(n => !readNotificationIds.includes(n.id)).length > 0 && (

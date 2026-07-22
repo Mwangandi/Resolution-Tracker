@@ -13,7 +13,7 @@ export function Dashboard() {
   const { resolutions, departments, directorates, logAudit } = useAppContext();
 
   const total = resolutions.length;
-  const completed = resolutions.filter(r => r.status === 'Completed').length;
+  const completed = resolutions.filter(r => r.status === 'Done' || r.status === 'Completed').length;
   const pending = total - completed;
   const globalImplementation = total === 0 ? 0 : Math.round((completed / total) * 100);
 
@@ -29,11 +29,11 @@ export function Dashboard() {
     const stats = departments.map(d => {
       const deptRes = resolutions.filter(r => r.departmentId && r.departmentId.split(',').map(s => s.trim()).includes(d.id));
       const deptTotal = deptRes.length;
-      const deptCompleted = deptRes.filter(r => r.status === 'Completed').length;
+      const deptCompleted = deptRes.filter(r => r.status === 'Done' || r.status === 'Completed').length;
       const deptImplementation = deptTotal === 0 ? 0 : Math.round((deptCompleted / deptTotal) * 100);
       
       // Calculate average time if they have completed
-      const completedRes = deptRes.filter(r => r.status === 'Completed' && r.assignedAt && r.approvedAt); // mockup
+      const completedRes = deptRes.filter(r => (r.status === 'Done' || r.status === 'Completed') && r.assignedAt && r.approvedAt); // mockup
       const avgTime = completedRes.length > 0 ? 
         completedRes.reduce((acc, r) => acc + (new Date(r.approvedAt || r.datePassed).getTime() - new Date(r.assignedAt || r.datePassed).getTime()) / (1000 * 3600 * 24), 0) / completedRes.length : 
         0;
@@ -58,7 +58,7 @@ export function Dashboard() {
       return {
         name: d.name.substring(0, 15) + (d.name.length > 15 ? '...' : ''),
         Total: dirRes.length,
-        Completed: dirRes.filter(r => r.status === 'Completed').length
+        Completed: dirRes.filter(r => r.status === 'Done' || r.status === 'Completed').length
       };
     }).filter(d => d.Total > 0);
   }, [resolutions, directorates]);
@@ -117,7 +117,7 @@ export function Dashboard() {
               <CheckCircle className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Completed</p>
+              <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Done</p>
               <p className="text-xl font-bold text-slate-800">{completed}</p>
             </div>
           </div>

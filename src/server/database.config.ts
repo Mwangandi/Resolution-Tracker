@@ -8,12 +8,23 @@
  */
 
 import { Injectable } from '@nestjs/common';
+import path from 'path';
 
 @Injectable()
 export class DatabaseConfig {
   // Read DB provider & connection configuration from environment
   public readonly provider = process.env.DATABASE_PROVIDER || 'sqlite'; // 'sqlite' | 'postgresql' | 'mysql' | 'mariadb'
-  public readonly url = process.env.DATABASE_URL || 'file:./prisma/dev.db';
+  public readonly url = (() => {
+    const defaultDbPath = path.resolve(process.cwd(), 'prisma/dev.db');
+    let u = (!process.env.DATABASE_URL || process.env.DATABASE_URL === 'forget_it_now' || process.env.DATABASE_URL.includes('/app/applet/'))
+      ? `file:${defaultDbPath}`
+      : process.env.DATABASE_URL;
+    if (u.startsWith('file:') && !u.includes('connection_limit')) {
+      const sep = u.includes('?') ? '&' : '?';
+      u = `${u}${sep}connection_limit=1`;
+    }
+    return u;
+  })();
 
   // Frappe settings
   public readonly frappe = {

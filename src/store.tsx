@@ -15,7 +15,7 @@ import {
 } from './types';
 
 const MOCK_USERS: User[] = [
-  { id: 'u0', name: 'Patterson Roge', email: 'pattersonroge12@gmail.com', role: 'System Administrator', phone: '0795752053', password: '**88Donda' },
+  { id: 'u0', name: 'John Doe', email: 'johndoe@gmail.com', role: 'System Administrator', phone: '0795752053', password: '**88Donda' },
   { id: 'u1', name: 'Gilbert', email: 'gilbert@taitataveta.go.ke', role: 'ICT' },
   { id: 'u2', name: 'Clerk Assistant Jane', email: 'jane@taitataveta.go.ke', role: 'Assistant County Assembly Clerk' },
   { id: 'u3', name: 'Rehema', email: 'rehema@taitataveta.go.ke', role: 'County Secretary' },
@@ -32,8 +32,8 @@ export const DEFAULT_PERMISSIONS: Record<Role, Record<PermissionKey, boolean>> =
   'County Assembly Clerk': {
     create_resolution: true,
     edit_resolution: true,
-    delete_resolution: false,
-    upload_documents: false,
+    delete_resolution: true,
+    upload_documents: true,
     view_resolutions: true,
     approve_resolutions: true,
     reject_resolutions: false,
@@ -43,7 +43,7 @@ export const DEFAULT_PERMISSIONS: Record<Role, Record<PermissionKey, boolean>> =
   'Assistant County Assembly Clerk': {
     create_resolution: true,
     edit_resolution: true,
-    delete_resolution: false,
+    delete_resolution: true,
     upload_documents: true,
     view_resolutions: true,
     approve_resolutions: false,
@@ -190,6 +190,10 @@ interface AppContextType {
   createUser: (user: Partial<User> & { password?: string; phone?: string }) => Promise<boolean>;
   updateUser: (id: string, user: Partial<User> & { password?: string; phone?: string }) => Promise<boolean>;
   deleteUser: (id: string) => Promise<boolean>;
+  customLogo: string | null;
+  updateCustomLogo: (logoBase64: string | null) => Promise<boolean>;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -226,6 +230,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [docCategories, setDocCategories] = useState<DocumentCategory[]>([]);
   const [statusCategories, setStatusCategories] = useState<StatusCategory[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [customLogo, setCustomLogo] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [rolePermissions, setRolePermissions] = useState<Record<Role, Record<PermissionKey, boolean>>>(() => {
     try {
@@ -266,13 +272,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const response = await authFetch('/api/data');
       if (response.ok) {
         const data = await response.json();
-        setResolutions(data.resolutions || []);
+        const sorted = (data.resolutions || []).sort((a: any, b: any) => {
+          return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+        setResolutions(sorted);
         setDepartments(data.departments || []);
         setDirectorates(data.directorates || []);
         setCommittees(data.committees || []);
         setDocCategories(data.docCategories || []);
         setStatusCategories(data.statusCategories || []);
         setAuditLogs(data.auditLogs || []);
+        if (data.customLogo !== undefined) {
+          setCustomLogo(data.customLogo);
+        }
         if (data.users && data.users.length > 0) {
           setUsers(data.users);
         }
@@ -428,6 +440,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           committeeId: data.committeeId,
           directorateId: data.directorateId,
           createdBy: currentUser.name,
+          documents: data.documents,
         }),
       });
 
@@ -448,10 +461,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: docData.name,
+          name: docData.description || docData.name || docData.fileName || 'Document',
+          fileName: docData.fileName || docData.name,
+          description: docData.description || (docData.name && docData.name !== docData.fileName ? docData.name : ''),
           url: docData.url || '#',
           categoryId: docData.categoryId || 'cat1',
-          uploadedBy: currentUser.name,
+          uploadedBy: docData.uploadedBy || currentUser.name,
         }),
       });
 
@@ -502,6 +517,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       if (response.ok) {
+        if (data.documents && data.documents.length > 0) {
+          for (const doc of data.documents) {
+            await addDocument(resolutionId, doc);
+          }
+        }
         await logAudit('Edit', 'Resolution', resolutionId, `Added executive update`, `/api/resolutions/${resolutionId}/updates`, 'POST');
         fetchData();
       }
@@ -645,6 +665,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return false;
   };
 
+  const updateCustomLogo = async (logoBase64: string | null) => {
+    try {
+      const response = await authFetch('/api/settings/logo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logo: logoBase64 }),
+      });
+      if (response.ok) {
+        setCustomLogo(logoBase64);
+        await logAudit('Edit', 'System', 'logo', logoBase64 ? 'Uploaded custom system logo' : 'Reset custom system logo to default', '/api/settings/logo', 'POST');
+        fetchData();
+        return true;
+      }
+    } catch (err) {
+      console.error('[STORE] Failed to update custom logo:', err);
+    }
+    return false;
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -674,6 +713,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createUser,
         updateUser,
         deleteUser,
+        customLogo,
+        updateCustomLogo,
+        searchTerm,
+        setSearchTerm,
       }}
     >
       {children}

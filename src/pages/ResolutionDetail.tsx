@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import { useAppContext } from '../store';
 import { 
   FileText, Calendar as CalendarIcon, Clock, CheckCircle, XCircle, 
-  Upload, MessageSquare, ShieldCheck, UserPlus, AlertCircle
+  Upload, MessageSquare, ShieldCheck, UserPlus, AlertCircle, X, Trash2
 } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { clsx } from 'clsx';
@@ -19,11 +19,14 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
     updateResolutionStatus, 
     departments, 
     directorates,
+    committees,
     statusCategories,
     logAudit,
     addDocument,
     addComment,
-    auditLogs
+    auditLogs,
+    deleteResolution,
+    rolePermissions
   } = useAppContext();
 
   const docCategories = useAppContext().docCategories.filter(c => c.isActive !== false);
@@ -35,6 +38,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
     name: '',
     categoryId: ''
   });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const [showExecReply, setShowExecReply] = useState(false);
   const [execReplyData, setExecReplyData] = useState({
@@ -42,6 +46,19 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
     text: '',
     documentName: '',
   });
+  const [selectedEvidenceFile, setSelectedEvidenceFile] = useState<File | null>(null);
+  const [selectedReportFile, setSelectedReportFile] = useState<File | null>(null);
+
+  // State variables for canonical workflow actions
+  const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+  const [selectedComms, setSelectedComms] = useState<string[]>([]);
+  const [assignDeadlineDays, setAssignDeadlineDays] = useState<number>(60);
+  const [requestMoreInfoNote, setRequestMoreInfoNote] = useState<string>('');
+  const [showRequestMoreInfo, setShowRequestMoreInfo] = useState<boolean>(false);
+  const [submitReportText, setSubmitReportText] = useState<string>('');
+  const [submitReportDocName, setSubmitReportDocName] = useState<string>('');
+  const [showSubmitReportForm, setShowSubmitReportForm] = useState<boolean>(false);
+  const [evidenceDocDesc, setEvidenceDocDesc] = useState<string>('');
 
   const { addExecutiveUpdate, approveExecutiveUpdate } = useAppContext();
 
@@ -64,16 +81,35 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
 
   const handleUploadSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadData.name || !uploadData.categoryId) return;
+    const category = uploadData.categoryId || docCategories[0]?.id || 'cat1';
+    const description = uploadData.name.trim();
+    const fileName = selectedFile?.name || 'Document.pdf';
     
-    addDocument(resolution.id, {
-      name: uploadData.name,
-      categoryId: uploadData.categoryId,
-      url: '#'
-    });
+    if (selectedFile) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        addDocument(resolution.id, {
+          name: fileName,
+          fileName: fileName,
+          description: description,
+          categoryId: category,
+          url: reader.result as string,
+        });
+      };
+      reader.readAsDataURL(selectedFile);
+    } else {
+      addDocument(resolution.id, {
+        name: fileName,
+        fileName: fileName,
+        description: description,
+        categoryId: category,
+        url: '#'
+      });
+    }
     
     setShowUpload(false);
     setUploadData({ name: '', categoryId: '' });
+    setSelectedFile(null);
   };
 
   const getStatusBadgeColor = (statusName: string) => {
@@ -81,92 +117,126 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
     if (custom && custom.badgeClass) return custom.badgeClass;
     
     switch (statusName) {
-      case 'Draft': return 'bg-gray-100 text-gray-800';
+      case 'Draft': return 'bg-slate-100 text-slate-800 border border-slate-200';
       case 'Pending Approval': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-      case 'Active': return 'bg-blue-100 text-blue-800 border border-blue-200';
       case 'Assigned': return 'bg-purple-100 text-purple-800 border border-purple-200';
       case 'In Progress': return 'bg-orange-100 text-orange-800 border border-orange-200';
-      case 'Completed': return 'bg-green-100 text-green-800 border border-green-200';
-      case 'Overdue': return 'bg-red-100 text-red-800 border border-red-200';
+      case 'Pending Report Review': return 'bg-blue-100 text-blue-800 border border-blue-200';
+      case 'Done': return 'bg-green-100 text-green-800 border border-green-200';
+      case 'Declined': return 'bg-red-100 text-red-800 border border-red-200';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const handleApprove = () => {
-    if (canApprove) {
-      updateResolutionStatus(resolution.id, 'Active', {
-        approvedAt: new Date().toISOString(),
-        approvedBy: currentUser?.id
-      });
-    }
+  const handleSubmitForApproval = () => {
+    updateResolutionStatus(resolution.id, 'Pending Approval');
   };
 
-  const handleReject = () => {
-    if (canReject) {
-      updateResolutionStatus(resolution.id, 'Rejected', {
-        approvedAt: new Date().toISOString(),
-        approvedBy: currentUser?.id
-      });
-    }
-  };
-
-  const [assignDept, setAssignDept] = useState('');
-  const [assignDir, setAssignDir] = useState('');
-
-  const handleAssign = () => {
-    if (canAssign) {
-      if (!assignDept || !assignDir) {
-        alert('Please select both Department and Directorate');
-        return;
-      }
-      updateResolutionStatus(resolution.id, 'Assigned', {
-        departmentId: assignDept,
-        directorateId: assignDir,
-        assignedAt: new Date().toISOString(),
-        assignedBy: currentUser?.id || '',
-        // Set due date based on implementation days
-        dueDate: addDays(new Date(), resolution.implementationTimeDays).toISOString()
-      });
-    }
-  };
-
-  const handleMarkProgress = () => {
-    if (canMarkProgress) {
-      updateResolutionStatus(resolution.id, 'In Progress');
-    }
-  };
-
-  const handleMarkComplete = () => {
-    if (canMarkComplete) {
-      updateResolutionStatus(resolution.id, 'Completed');
-    }
-  };
-
-  const handleMarkNotImplemented = () => {
-    if (canMarkProgress || canMarkComplete) {
-      updateResolutionStatus(resolution.id, 'Overdue');
-    }
+  const handleApproveAndAssign = () => {
+    const days = resolution.implementationTimeDays || 30;
+    updateResolutionStatus(resolution.id, 'In Progress', {
+      approvedAt: new Date().toISOString(),
+      approvedBy: currentUser?.id,
+      assignedAt: new Date().toISOString(),
+      assignedBy: currentUser?.id,
+      dueDate: addDays(new Date(), days).toISOString(),
+    });
+    addComment(resolution.id, `✓ Resolution Approved by County Secretary. Implementation has officially started (Status: In Progress). Automated SMS & Email notifications dispatched systemwide to assigned Department Heads (CECM/CCO) and Oversight Committees.`);
   };
 
   const handleExecReplySubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!execReplyData.text && !execReplyData.proposedStatus && !execReplyData.documentName) return;
+    if (!execReplyData.text && !execReplyData.documentName) return;
     
-    addExecutiveUpdate(resolution.id, {
-      text: execReplyData.text,
-      proposedStatus: execReplyData.proposedStatus || undefined,
-      documents: execReplyData.documentName ? [{
-        id: Math.random().toString(36).substring(7),
-        name: execReplyData.documentName,
-        url: '#',
-        categoryId: 'reply_doc',
-        uploadedAt: new Date().toISOString(),
-        uploadedBy: currentUser?.id || 'unknown'
-      }] : []
-    });
+    const submitUpdate = (fileUrl: string) => {
+      addExecutiveUpdate(resolution.id, {
+        text: execReplyData.text,
+        proposedStatus: resolution.status,
+        documents: execReplyData.documentName ? [{
+          id: Math.random().toString(36).substring(7),
+          name: execReplyData.documentName + (evidenceDocDesc ? ` (${evidenceDocDesc})` : ''),
+          url: fileUrl,
+          categoryId: 'reply_doc',
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: currentUser?.name || 'unknown'
+        }] : []
+      });
+
+      addComment(resolution.id, `Uploaded evidence / status update: ${execReplyData.text}`);
+      
+      setExecReplyData({ proposedStatus: '', text: '', documentName: '' });
+      setEvidenceDocDesc('');
+      setSelectedEvidenceFile(null);
+      setShowExecReply(false);
+    };
+
+    if (selectedEvidenceFile) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        submitUpdate(reader.result as string);
+      };
+      reader.readAsDataURL(selectedEvidenceFile);
+    } else {
+      submitUpdate('#');
+    }
+  };
+
+  const handleSubmitFinalReport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!submitReportText.trim()) {
+      alert('Please provide report content / summary');
+      return;
+    }
     
-    setExecReplyData({ proposedStatus: '', text: '', documentName: '' });
-    setShowExecReply(false);
+    const submitReport = (fileUrl: string) => {
+      addExecutiveUpdate(resolution.id, {
+        text: `[FINAL REPORT] ${submitReportText}`,
+        proposedStatus: 'Pending Report Review',
+        documents: submitReportDocName ? [{
+          id: Math.random().toString(36).substring(7),
+          name: `Final Report: ${submitReportDocName}`,
+          url: fileUrl,
+          categoryId: 'cat3', // Report category
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: currentUser?.name || 'unknown'
+        }] : []
+      });
+      
+      updateResolutionStatus(resolution.id, 'Pending Report Review');
+      addComment(resolution.id, `📝 Submitted Final Implementation Report for County Assembly review.`);
+      
+      setSubmitReportText('');
+      setSubmitReportDocName('');
+      setSelectedReportFile(null);
+      setShowSubmitReportForm(false);
+    };
+
+    if (selectedReportFile) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        submitReport(reader.result as string);
+      };
+      reader.readAsDataURL(selectedReportFile);
+    } else {
+      submitReport('#');
+    }
+  };
+
+  const handleAcceptReport = () => {
+    updateResolutionStatus(resolution.id, 'Done');
+    addComment(resolution.id, `✓ County Assembly accepted the report and closed the resolution.`);
+  };
+
+  const handleRequestMoreInfo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestMoreInfoNote.trim()) {
+      alert('Please provide a reason / note for requesting more information');
+      return;
+    }
+    updateResolutionStatus(resolution.id, 'In Progress');
+    addComment(resolution.id, `⚠️ Request for More Information: ${requestMoreInfoNote}`);
+    setRequestMoreInfoNote('');
+    setShowRequestMoreInfo(false);
   };
 
   const handleAddComment = (e: React.FormEvent) => {
@@ -177,13 +247,100 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
     setCommentText('');
   };
 
+  const handleDownloadFile = async (name: string, url: string, fileName?: string) => {
+    try {
+      // Determine base name and extension
+      let downloadName = fileName || name;
+
+      if (!downloadName.includes('.') && fileName && fileName.includes('.')) {
+        const ext = fileName.split('.').pop();
+        if (ext) downloadName = `${downloadName}.${ext}`;
+      }
+
+      // 1. Data URLs, Blob URLs, or external HTTP URLs
+      if (url && (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://'))) {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        
+        // Detect extension from MIME type if missing
+        if (!downloadName.includes('.')) {
+          const type = blob.type.toLowerCase();
+          if (type.includes('pdf')) downloadName += '.pdf';
+          else if (type.includes('word') || type.includes('docx')) downloadName += '.docx';
+          else if (type.includes('excel') || type.includes('xlsx') || type.includes('sheet')) downloadName += '.xlsx';
+          else if (type.includes('png')) downloadName += '.png';
+          else if (type.includes('jpeg') || type.includes('jpg')) downloadName += '.jpg';
+          else downloadName += '.pdf';
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = downloadName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } else {
+        // 2. Pre-seeded or placeholder document records without binary payload
+        let ext = 'pdf';
+        if (downloadName.includes('.')) {
+          ext = downloadName.split('.').pop()?.toLowerCase() || 'pdf';
+        } else {
+          ext = 'pdf';
+          downloadName = `${downloadName}.pdf`;
+        }
+
+        let mimeType = 'application/pdf';
+        if (ext === 'docx' || ext === 'doc') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        else if (ext === 'xlsx' || ext === 'xls') mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        else if (ext === 'png') mimeType = 'image/png';
+        else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+        else if (ext === 'txt') mimeType = 'text/plain;charset=utf-8';
+
+        let blobContent: BlobPart[];
+        if (ext === 'pdf') {
+          // Standard minimal PDF binary structure
+          const pdfData = `%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj\n4 0 obj\n<< /Length 140 >>\nstream\nBT /F1 14 Tf 50 720 Td (COUNTY ASSEMBLY OF TAITA TAVETA) Tj 0 -25 Td (Official Document: ${name}) Tj 0 -20 Td (Resolution Ref: ${resolution.referenceNumber}) Tj 0 -20 Td (Status: ${resolution.status}) Tj ET\nendstream\nendobj\n5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\nxref\n0 6\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000262 00000 n \n0000000443 00000 n \ntrailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n520\n%%EOF`;
+          blobContent = [pdfData];
+        } else {
+          const fileContent = `COUNTY ASSEMBLY OF TAITA TAVETA\nDocument: ${name}\nResolution Ref: ${resolution.referenceNumber}\nTitle: ${resolution.title}\nStatus: ${resolution.status}\nDate: ${new Date().toLocaleDateString()}`;
+          blobContent = [fileContent];
+        }
+
+        const blob = new Blob(blobContent, { type: mimeType });
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = downloadName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+
   // Derived state for permissions
   const isSysAdmin = currentUser?.role && ['System Administrator', 'ICT Director'].includes(currentUser.role);
-  const canApprove = (currentUser?.role === 'County Assembly Clerk' || currentUser?.role === 'County Secretary' || isSysAdmin) && resolution.status === 'Pending Approval';
-  const canReject = (currentUser?.role === 'County Secretary' || isSysAdmin) && resolution.status === 'Pending Approval';
-  const canAssign = (currentUser?.role === 'Assistant Director Liaison' || currentUser?.role === 'County Secretary' || isSysAdmin) && (resolution.status === 'Active' || resolution.status === 'Assigned');
-  const canMarkProgress = (['CECM', 'CCO', 'Director', 'Assistant Director Liaison'].includes(currentUser?.role || '') || isSysAdmin) && (resolution.status === 'Assigned' || resolution.status === 'In Progress');
-  const canMarkComplete = (['CECM', 'CCO', 'Director', 'Assistant Director Liaison'].includes(currentUser?.role || '') || isSysAdmin) && (resolution.status === 'In Progress' || resolution.status === 'Assigned');
+  const isClerkOrAssistant = currentUser?.role && ['County Assembly Clerk', 'Assistant County Assembly Clerk'].includes(currentUser.role);
+  const isCountySecretary = currentUser?.role && ['County Secretary', "County Secretary's Assistant"].includes(currentUser.role);
+  const isExecutiveUser = currentUser?.role && ['CECM', 'CCO', 'Director', 'County Secretary', "County Secretary's Assistant"].includes(currentUser.role);
+
+  const userPerms = currentUser ? rolePermissions[currentUser.role] : null;
+  const canDeleteResolution = userPerms?.delete_resolution || ['System Administrator', 'ICT Director', 'ICT', 'County Assembly Clerk', 'Assistant County Assembly Clerk'].includes(currentUser?.role || '');
+
+  const canSubmitForApproval = (isClerkOrAssistant || isSysAdmin) && resolution.status === 'Draft';
+  const canApproveAndAssign = (isCountySecretary || isSysAdmin) && resolution.status === 'Pending Approval';
+  
+  const canUploadEvidence = (isExecutiveUser || isSysAdmin) && resolution.status === 'In Progress';
+  const canSubmitReport = (isExecutiveUser || isSysAdmin) && resolution.status === 'In Progress';
+  
+  const canReviewReport = (isClerkOrAssistant || isSysAdmin) && resolution.status === 'Pending Report Review';
+  
+  const isLocked = resolution.status === 'Done' && !isSysAdmin;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -198,12 +355,32 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
               {resolution.title}
             </p>
           </div>
-          <span className={clsx(
-            "px-3 py-1 rounded-full text-sm font-semibold shadow-sm",
-            getStatusBadgeColor(resolution.status)
-          )}>
-            {resolution.status}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className={clsx(
+              "px-3 py-1 rounded-full text-sm font-semibold shadow-sm",
+              getStatusBadgeColor(resolution.status)
+            )}>
+              {resolution.status}
+            </span>
+            {canDeleteResolution && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm(`Are you sure you want to delete resolution ${resolution.referenceNumber}? This action cannot be undone.`)) {
+                    const success = await deleteResolution(resolution.id);
+                    if (success) {
+                      navigate('/resolutions');
+                    }
+                  }
+                }}
+                className="px-3 py-1 text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                title="Delete Resolution"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
+          </div>
         </div>
         <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
           <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
@@ -282,167 +459,205 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
       </div>
 
       {/* Action Panels based on roles */}
-      {canApprove && (
-        <div className="bg-white border border-yellow-200 p-4 shadow-sm rounded-xl">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <ShieldCheck className="h-5 w-5 text-yellow-400" />
+      {/* Action Panels based on roles */}
+      {canSubmitForApproval && (
+        <div className="bg-white border border-slate-200 p-6 shadow-sm rounded-xl flex items-center justify-between">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
+              <FileText className="h-5 w-5" />
             </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-yellow-800">Resolution Approval Required</h3>
-              <div className="mt-2 text-sm text-yellow-700">
-                <p>Please review the resolution details and select an action to make it active or reject it.</p>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-800">Draft Resolution</h4>
+              <p className="text-xs text-slate-500 mt-0.5">This resolution is currently a Draft. Submit it to start the approval and routing process.</p>
+            </div>
+          </div>
+          <button
+            onClick={handleSubmitForApproval}
+            className="px-4 py-2 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-900 rounded-lg cursor-pointer"
+          >
+            Submit for Approval
+          </button>
+        </div>
+      )}
+
+      {canApproveAndAssign && (
+        <div className="bg-white border border-yellow-200 p-6 shadow-sm rounded-xl space-y-6">
+          <div className="flex items-start gap-3 border-b border-yellow-100 pb-4">
+            <ShieldCheck className="h-6 w-6 text-yellow-600" />
+            <div>
+              <h3 className="text-sm font-bold text-yellow-900 uppercase tracking-wide">County Secretary Review: Approve & Route to Executive</h3>
+              <p className="text-xs text-yellow-700 mt-1">
+                As County Secretary, please review and approve this resolution to initiate execution. Since the target departments and oversight committees are already assigned by the Clerk at registration, approving this will automatically dispatch notifications to the respective Department Heads (CECM & CCO) and Oversight Committees, and transition the status directly to 'In Progress'.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <div>
+              <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Assigned Departments</span>
+              <div className="flex flex-wrap gap-1.5">
+                {resolution.departmentId ? resolution.departmentId.split(',').map(id => {
+                  const d = departments.find(dept => dept.id === id.trim());
+                  return d ? (
+                    <span key={id} className="inline-flex items-center bg-orange-50 text-orange-800 border border-orange-200 px-2.5 py-1 rounded-md text-xs font-semibold">
+                      {d.name}
+                    </span>
+                  ) : null;
+                }) : <span className="text-xs text-slate-400 italic">None assigned</span>}
               </div>
-              <div className="mt-4 flex space-x-3">
-                <button
-                  type="button"
-                  onClick={handleApprove}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700"
-                >
-                  Approve Resolution
-                </button>
-                {canReject && (
-                  <button
-                    type="button"
-                    onClick={handleReject}
-                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700"
-                  >
-                    Reject Resolution
-                  </button>
-                )}
+            </div>
+
+            <div>
+              <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Oversight Committees</span>
+              <div className="flex flex-wrap gap-1.5">
+                {resolution.committeeId ? resolution.committeeId.split(',').map(id => {
+                  const c = committees.find(comm => comm.id === id.trim());
+                  return c ? (
+                    <span key={id} className="inline-flex items-center bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-1 rounded-md text-xs font-semibold">
+                      {c.name}
+                    </span>
+                  ) : null;
+                }) : <span className="text-xs text-slate-400 italic">None assigned</span>}
               </div>
+            </div>
+
+            <div className="md:col-span-2 border-t border-slate-200 pt-3 flex items-center justify-between">
+              <div>
+                <span className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Implementation Timeline</span>
+                <span className="text-sm font-semibold text-slate-800 mt-0.5 block">
+                  {resolution.implementationTimeDays} Days (Customized timeline, up to 60 days)
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleApproveAndAssign}
+                className="px-5 py-2.5 border border-transparent text-xs font-bold uppercase tracking-wider rounded-xl text-white bg-green-600 hover:bg-green-700 shadow-md shadow-green-600/15 transition-all duration-150 cursor-pointer"
+              >
+                Approve & Start Implementation
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {canAssign && (
-        <div className="bg-white border border-blue-200 p-4 shadow-sm rounded-xl">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <UserPlus className="h-5 w-5 text-blue-400" />
-            </div>
-            <div className="ml-3 w-full">
-              <h3 className="text-sm font-medium text-blue-800">Assign to Department & Directorate</h3>
-              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="block text-sm font-medium text-blue-900">Department</label>
-                  <select
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                    value={assignDept}
-                    onChange={(e) => setAssignDept(e.target.value)}
-                  >
-                    <option value="">Select Department</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-blue-900">Directorate</label>
-                  <select
-                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-                    value={assignDir}
-                    onChange={(e) => setAssignDir(e.target.value)}
-                    disabled={!assignDept}
-                  >
-                    <option value="">Select Directorate</option>
-                    {directorates.filter(d => d.departmentId === assignDept).map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={handleAssign}
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-                >
-                  Confirm Assignment
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {((canMarkProgress || canMarkComplete) || (resolution.executiveUpdates && resolution.executiveUpdates.length > 0)) && (
+      {canUploadEvidence && (
         <div className="bg-white border border-orange-200 shadow-sm rounded-xl overflow-hidden">
-          {(canMarkProgress || canMarkComplete) && (
-            <div className="p-4 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Activity className="h-5 w-5 text-orange-500" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-bold text-orange-900">Executive Reply</h3>
-                  <p className="text-xs text-orange-700">Submit implementation progress to the Assembly.</p>
-                </div>
+          <div className="p-4 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
+            <div className="flex">
+              <Activity className="h-5 w-5 text-orange-500 mr-2" />
+              <div>
+                <h3 className="text-sm font-bold text-orange-900">Upload Evidence & Status Update</h3>
+                <p className="text-xs text-orange-700">Add an ongoing implementation update or upload evidence files.</p>
               </div>
-              {!showExecReply && (
-                <button
-                  onClick={() => setShowExecReply(true)}
-                  className="inline-flex items-center px-3 py-1.5 border border-orange-300 text-xs font-medium rounded-md shadow-sm text-orange-700 bg-white hover:bg-orange-50"
-                >
-                  Add Reply
-                </button>
-              )}
             </div>
-          )}
-          
-          {(canMarkProgress || canMarkComplete) && showExecReply && (
-            <form onSubmit={handleExecReplySubmit} className="p-4 bg-white space-y-4">
+            {!showExecReply && (
+              <button
+                onClick={() => {
+                  setShowExecReply(true);
+                  setShowSubmitReportForm(false);
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-orange-700 bg-white border border-orange-300 hover:bg-orange-50 cursor-pointer"
+              >
+                Add Update / Evidence
+              </button>
+            )}
+          </div>
+
+          {showExecReply && (
+            <form onSubmit={handleExecReplySubmit} className="p-6 bg-white space-y-4 border-b border-slate-100">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Update Status</label>
-                <select
-                  value={execReplyData.proposedStatus}
-                  onChange={(e) => setExecReplyData({...execReplyData, proposedStatus: e.target.value})}
-                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm rounded-md"
-                >
-                  <option value="">No change in status</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Overdue">Not Implemented (Overdue)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Reply / Comments</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Progress Details / Remarks</label>
                 <textarea
+                  required
                   rows={3}
                   value={execReplyData.text}
                   onChange={(e) => setExecReplyData({...execReplyData, text: e.target.value})}
-                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
-                  placeholder="Provide details on the implementation..."
+                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                  placeholder="Provide specific details about the ongoing implementation progress..."
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Attach Document (Optional)</label>
-                <div className="mt-1 flex items-center">
-                  <Upload className="h-5 w-5 text-gray-400 mr-2" />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Evidence File (Optional)</label>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center justify-center py-2 px-3 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 bg-white cursor-pointer transition-colors w-full">
+                      <Upload className={`h-4 w-4 mr-2 ${selectedEvidenceFile ? 'text-green-500' : 'text-gray-400'}`} />
+                      <span className="truncate font-medium max-w-[150px]">
+                        {selectedEvidenceFile ? `✓ ${selectedEvidenceFile.name}` : 'Choose File...'}
+                      </span>
+                      <input
+                        type="file"
+                        className="sr-only"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,*/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setSelectedEvidenceFile(file);
+                            setExecReplyData({
+                              ...execReplyData,
+                              documentName: file.name
+                            });
+                          }
+                        }}
+                      />
+                    </label>
+                    {selectedEvidenceFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedEvidenceFile(null);
+                          setExecReplyData({ ...execReplyData, documentName: '' });
+                        }}
+                        className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 bg-white cursor-pointer"
+                        title="Remove file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Document Name / Label</label>
                   <input
                     type="text"
                     value={execReplyData.documentName}
                     onChange={(e) => setExecReplyData({...execReplyData, documentName: e.target.value})}
-                    className="block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
-                    placeholder="Enter document name to mock upload..."
+                    className="mt-1 block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-orange-500"
+                    placeholder="e.g. Site Photo, Receipts..."
                   />
                 </div>
               </div>
-              <div className="flex justify-end space-x-3">
+
+              {execReplyData.documentName && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Attachment Description</label>
+                  <input
+                    type="text"
+                    value={evidenceDocDesc}
+                    onChange={(e) => setEvidenceDocDesc(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-orange-500"
+                    placeholder="Brief explanation of this attachment..."
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
                 <button
                   type="button"
                   onClick={() => setShowExecReply(false)}
-                  className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 border border-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!execReplyData.text && !execReplyData.proposedStatus}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50"
+                  disabled={!execReplyData.text}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 cursor-pointer"
                 >
-                  Submit Reply
+                  Submit Update
                 </button>
               </div>
             </form>
@@ -451,9 +666,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
           {resolution.executiveUpdates && resolution.executiveUpdates.length > 0 && (
             <div className="bg-gray-50 border-t border-gray-200">
               <ul className="divide-y divide-gray-200">
-                {resolution.executiveUpdates.filter(u => 
-                  !(currentUser?.role === 'County Assembly Clerk' || currentUser?.role === 'Assistant County Assembly Clerk' || currentUser?.role === 'Committee Clerk') || u.approvalStatus === 'Approved'
-                ).map(update => (
+                {resolution.executiveUpdates.map(update => (
                   <li key={update.id} className="p-4 flex space-x-4">
                     <div className="flex-shrink-0">
                       <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600 uppercase">
@@ -467,22 +680,8 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
                           <span className="text-gray-500 text-xs ml-2">({update.authorRole})</span>
                           <span className="text-gray-400 text-xs ml-2">{format(new Date(update.createdAt), 'MMM d, yyyy HH:mm')}</span>
                         </div>
-                        <span className={clsx(
-                          "px-2.5 py-0.5 rounded-full text-xs font-medium",
-                          update.approvalStatus === 'Approved' ? "bg-green-100 text-green-800" :
-                          update.approvalStatus === 'Rejected' ? "bg-red-100 text-red-800" :
-                          "bg-yellow-100 text-yellow-800"
-                        )}>
-                          {update.approvalStatus}
-                        </span>
                       </div>
                       
-                      {update.proposedStatus && (
-                        <div className="text-sm">
-                          <span className="font-medium text-gray-700">Proposed Status: </span>
-                          <span className="text-gray-900">{update.proposedStatus}</span>
-                        </div>
-                      )}
                       {update.text && (
                         <div className="text-sm text-gray-700 mt-1 whitespace-pre-wrap bg-white p-3 border border-gray-100 rounded-md">
                           {update.text}
@@ -494,33 +693,14 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
                           {update.documents.map(doc => (
                             <div key={doc.id} className="flex items-center text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded w-max border border-orange-100">
                               <FileText className="h-4 w-4 mr-1" />
-                              <a href={doc.url} className="hover:underline">{doc.name}</a>
+                              <button
+                                onClick={() => handleDownloadFile(doc.name, doc.url, doc.fileName)}
+                                className="hover:underline cursor-pointer text-left focus:outline-none"
+                              >
+                                {doc.name}
+                              </button>
                             </div>
                           ))}
-                        </div>
-                      )}
-
-                      {/* Approval Actions */}
-                      {update.approvalStatus !== 'Approved' && update.approvalStatus !== 'Rejected' && (
-                        <div className="mt-2 flex space-x-2">
-                          {((update.approvalStatus === 'Pending CCO' && ['CECM', 'CCO'].includes(currentUser?.role || '') && currentUser?.departmentId && resolution.departmentId?.split(',').map(s => s.trim()).includes(currentUser.departmentId)) || 
-                            (update.approvalStatus === 'Pending Liaison' && 
-                             (currentUser?.role === 'Assistant Director Liaison' || currentUser?.role === 'County Secretary'))) && (
-                            <>
-                              <button
-                                onClick={() => approveExecutiveUpdate(resolution.id, update.id, 'Approve')}
-                                className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                onClick={() => approveExecutiveUpdate(resolution.id, update.id, 'Reject')}
-                                className="inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-red-700 bg-red-100 hover:bg-red-200"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          )}
                         </div>
                       )}
                     </div>
@@ -529,6 +709,182 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
               </ul>
             </div>
           )}
+        </div>
+      )}
+
+      {canSubmitReport && (
+        <div className="bg-white border border-blue-200 shadow-sm rounded-xl overflow-hidden mt-6">
+          <div className="p-4 bg-blue-50 border-b border-blue-100 flex justify-between items-center">
+            <div className="flex">
+              <FileText className="h-5 w-5 text-blue-500 mr-2" />
+              <div>
+                <h3 className="text-sm font-bold text-blue-900">Submit Implementation Reports</h3>
+                <p className="text-xs text-blue-700">Conclude implementation and forward a formal report to the Assembly for review.</p>
+              </div>
+            </div>
+            {!showSubmitReportForm && (
+              <button
+                onClick={() => {
+                  setShowSubmitReportForm(true);
+                  setShowExecReply(false);
+                }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-blue-700 bg-white border border-blue-300 hover:bg-blue-50 cursor-pointer"
+              >
+                Submit Reports
+              </button>
+            )}
+          </div>
+
+          {showSubmitReportForm && (
+            <form onSubmit={handleSubmitFinalReport} className="p-6 bg-white space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report Summary & Content (Required)</label>
+                <textarea
+                  required
+                  rows={4}
+                  value={submitReportText}
+                  onChange={(e) => setSubmitReportText(e.target.value)}
+                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-blue-500"
+                  placeholder="Provide a comprehensive summary of the implemented works and outcomes..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report File (Optional)</label>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center justify-center py-2 px-3 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 bg-white cursor-pointer transition-colors w-full">
+                      <Upload className={`h-4 w-4 mr-2 ${selectedReportFile ? 'text-green-500' : 'text-gray-400'}`} />
+                      <span className="truncate font-medium max-w-[150px]">
+                        {selectedReportFile ? `✓ ${selectedReportFile.name}` : 'Choose File...'}
+                      </span>
+                      <input
+                        type="file"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setSelectedReportFile(file);
+                            setSubmitReportDocName(file.name);
+                          }
+                        }}
+                      />
+                    </label>
+                    {selectedReportFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedReportFile(null);
+                          setSubmitReportDocName('');
+                        }}
+                        className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 bg-white cursor-pointer"
+                        title="Remove file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report Document Name / Label</label>
+                  <input
+                    type="text"
+                    value={submitReportDocName}
+                    onChange={(e) => setSubmitReportDocName(e.target.value)}
+                    className="block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-blue-500"
+                    placeholder="e.g. Voi Hospital Upgrade Phase 1 Report.pdf"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowSubmitReportForm(false)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 border border-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
+                >
+                  Submit Report to Assembly
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {canReviewReport && (
+        <div className="bg-white border border-indigo-200 p-6 shadow-sm rounded-xl space-y-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="h-6 w-6 text-indigo-600" />
+            <div>
+              <h3 className="text-sm font-bold text-indigo-950 uppercase tracking-wide">Review Implementation Report</h3>
+              <p className="text-xs text-indigo-700 mt-1">
+                An Executive department has submitted an implementation report. Please review the reports and either accept them (closing the resolution) or bounce back to In Progress with more information requested.
+              </p>
+            </div>
+          </div>
+
+          {!showRequestMoreInfo ? (
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowRequestMoreInfo(true)}
+                className="px-4 py-2 text-xs font-semibold text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg cursor-pointer"
+              >
+                Bounce Back (Request More Info)
+              </button>
+              <button
+                onClick={handleAcceptReport}
+                className="px-4 py-2 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg cursor-pointer"
+              >
+                Accept & Conclude Resolution
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleRequestMoreInfo} className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Note / Request Reason (Required)</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={requestMoreInfoNote}
+                  onChange={(e) => setRequestMoreInfoNote(e.target.value)}
+                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-orange-500"
+                  placeholder="Detail exactly what additional information, documentation, or action is required..."
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRequestMoreInfo(false)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                >
+                  Send Request & Reopen
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {resolution.status === 'Done' && (
+        <div className="bg-green-50 border border-green-200 p-6 rounded-xl flex items-center gap-3">
+          <CheckCircle className="h-6 w-6 text-green-600" />
+          <div>
+            <h4 className="text-sm font-semibold text-green-900">✓ Resolution Concluded & Done</h4>
+            <p className="text-xs text-green-700 mt-0.5">The Assembly accepted the final implementation report and successfully closed this resolution record.</p>
+          </div>
         </div>
       )}
 
@@ -551,14 +907,15 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
             {showUpload ? (
               <form onSubmit={handleUploadSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Document Name</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Document Description / Note <span className="text-xs text-gray-400 font-normal">(Optional - describes document contents)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     value={uploadData.name}
                     onChange={(e) => setUploadData({ ...uploadData, name: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
-                    placeholder="e.g. Addendum 1 or Committee Report"
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm bg-white"
+                    placeholder="e.g. Official Hansard Scan, Signed Resolution Minutes..."
                   />
                 </div>
                 <div>
@@ -576,21 +933,43 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">File</label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <label className="block text-sm font-medium text-gray-700">Attach Document File</label>
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-white">
                     <div className="space-y-1 text-center">
-                      <Upload className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="flex text-sm text-gray-600">
+                      <Upload className={`mx-auto h-12 w-12 ${selectedFile ? 'text-green-500' : 'text-gray-400'}`} />
+                      <div className="flex text-sm text-gray-600 justify-center">
                         <label
                           htmlFor="file-upload"
                           className="relative cursor-pointer bg-white rounded-md font-medium text-orange-600 hover:text-orange-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-orange-500"
                         >
-                          <span>Upload a file</span>
-                          <input id="file-upload" name="file-upload" type="file" className="sr-only" />
+                          <span>{selectedFile ? 'Change file' : 'Upload a file'}</span>
+                          <input 
+                            id="file-upload" 
+                            name="file-upload" 
+                            type="file" 
+                            className="sr-only" 
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setSelectedFile(file);
+                              }
+                            }}
+                          />
                         </label>
-                        <p className="pl-1">or drag and drop</p>
+                        {!selectedFile && <p className="pl-1 text-slate-500">or drag & drop</p>}
                       </div>
-                      <p className="text-xs text-gray-500">PDF, DOCX up to 10MB</p>
+                      {selectedFile ? (
+                        <div className="flex items-center justify-center gap-2 mt-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                          <span>{selectedFile.name}</span>
+                          <span className="text-[10px] text-slate-500 font-mono font-normal">
+                            ({(selectedFile.size / 1024).toFixed(0)} KB)
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500">Supports PDF, DOCX, XLSX, Images & Any Document Format</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -614,22 +993,42 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
               <>
                 {resolution.documents.length > 0 ? (
                   <ul className="border border-gray-200 rounded-md divide-y divide-gray-200">
-                    {resolution.documents.map((doc) => (
-                      <li key={doc.id} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
-                        <div className="w-0 flex-1 flex flex-col">
-                          <div className="flex items-center">
-                            <FileText className="flex-shrink-0 h-5 w-5 text-gray-400" />
-                            <span className="ml-2 flex-1 w-0 truncate font-medium text-gray-900">{doc.name}</span>
+                    {resolution.documents.map((doc) => {
+                      const displayName = doc.fileName || doc.name;
+                      const desc = doc.description || (doc.name !== doc.fileName ? doc.name : '');
+                      return (
+                        <li key={doc.id} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
+                          <div className="w-0 flex-1 flex flex-col">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <FileText className="flex-shrink-0 h-5 w-5 text-orange-500 shrink-0" />
+                              <span className="font-bold text-gray-900 truncate">{displayName}</span>
+                              {displayName.includes('.') && (
+                                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded font-bold shrink-0 border border-slate-200">
+                                  {displayName.split('.').pop()}
+                                </span>
+                              )}
+                            </div>
+                            {desc && desc !== displayName && (
+                              <p className="ml-7 text-xs text-slate-600 mt-0.5 font-medium">
+                                <span className="text-slate-400 font-normal">Description: </span>{desc}
+                              </p>
+                            )}
+                            <span className="ml-7 text-[11px] text-gray-400 mt-0.5">
+                              {docCategories.find(c => c.id === doc.categoryId)?.name || 'Document'} • Uploaded {format(new Date(doc.uploadedAt), 'MMM d, yyyy')} {doc.uploadedBy ? `by ${doc.uploadedBy}` : ''}
+                            </span>
                           </div>
-                          <span className="ml-7 text-xs text-gray-500 mt-1">
-                            {docCategories.find(c => c.id === doc.categoryId)?.name || 'Document'} • {format(new Date(doc.uploadedAt), 'MMM d, yyyy')}
-                          </span>
-                        </div>
-                        <div className="ml-4 flex-shrink-0">
-                          <a href={doc.url} className="font-medium text-orange-600 hover:text-orange-500">Download</a>
-                        </div>
-                      </li>
-                    ))}
+                          <div className="ml-4 flex-shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadFile(displayName, doc.url, displayName)}
+                              className="font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer focus:outline-none text-xs bg-orange-50 px-2.5 py-1 rounded border border-orange-200"
+                            >
+                              Download
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : (
                   <div className="text-center py-6">

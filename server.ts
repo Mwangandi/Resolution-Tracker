@@ -1,16 +1,16 @@
 import 'reflect-metadata';
+import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
 // Ensure DATABASE_URL is set correctly for SQLite, bypassing any dummy/empty values injected by the container platform
-if (!process.env.DATABASE_URL || process.env.DATABASE_URL === 'forget_it_now') {
-  process.env.DATABASE_URL = 'file:./prisma/dev.db';
+const defaultDbPath = path.resolve(process.cwd(), 'prisma/dev.db');
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL === 'forget_it_now' || !process.env.DATABASE_URL.startsWith('file:')) {
+  process.env.DATABASE_URL = `file:${defaultDbPath}`;
 }
 
-
 import express from 'express';
-import path from 'path';
-import fs from 'fs';
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { createServer as createViteServer } from 'vite';
@@ -73,8 +73,8 @@ async function bootstrap() {
   });
 
   // Basic middlewares
-  appProxy.use(express.json());
-  appProxy.use(express.urlencoded({ extended: true }));
+  appProxy.use(express.json({ limit: '200mb' }));
+  appProxy.use(express.urlencoded({ limit: '200mb', extended: true }));
 
   const distPath = path.join(process.cwd(), 'dist');
   let vite: any = null;
@@ -92,6 +92,7 @@ async function bootstrap() {
   const nestApp = await NestFactory.create(
     AppModule,
     new ExpressAdapter(appProxy),
+    { bodyParser: false },
   );
 
   // Register Vite and static assets exception filter

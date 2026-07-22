@@ -11,7 +11,7 @@ import autoTable from 'jspdf-autotable';
 import { ResolutionDetail } from './ResolutionDetail';
 
 export function ResolutionsList() {
-  const { resolutions, currentUser, statusCategories, departments, committees, rolePermissions, deleteResolution, logAudit } = useAppContext();
+  const { resolutions, currentUser, statusCategories, departments, committees, rolePermissions, deleteResolution, logAudit, searchTerm, setSearchTerm } = useAppContext();
   const navigate = useNavigate();
   const { id } = useParams<{ id?: string }>();
   const [openTabIds, setOpenTabIds] = useState<string[]>([]);
@@ -43,7 +43,6 @@ export function ResolutionsList() {
     }
   };
 
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [departmentFilter, setDepartmentFilter] = useState<string>('All');
   const [committeeFilter, setCommitteeFilter] = useState<string>('All');
@@ -52,8 +51,10 @@ export function ResolutionsList() {
   const [isFiltersExposed, setIsFiltersExposed] = useState<boolean>(false);
 
   const filteredResolutions = resolutions.filter(res => {
-    const matchesSearch = res.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          res.referenceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+    const title = res.title ? res.title.toLowerCase() : '';
+    const refNum = res.referenceNumber ? res.referenceNumber.toLowerCase() : '';
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = title.includes(term) || refNum.includes(term);
     const matchesStatus = statusFilter === 'All' || res.status === statusFilter;
     const matchesDepartment = departmentFilter === 'All' || (res.departmentId && res.departmentId.split(',').map(s => s.trim()).includes(departmentFilter));
     const matchesCommittee = committeeFilter === 'All' || (res.committeeId && res.committeeId.split(',').map(s => s.trim()).includes(committeeFilter));
@@ -110,20 +111,20 @@ export function ResolutionsList() {
     if (custom && custom.badgeClass) return custom.badgeClass;
 
     switch (statusName) {
-      case 'Draft': return 'bg-gray-100 text-gray-800';
+      case 'Draft': return 'bg-slate-100 text-slate-800 border border-slate-200';
       case 'Pending Approval': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-      case 'Active': return 'bg-blue-100 text-blue-800 border border-blue-200';
       case 'Assigned': return 'bg-purple-100 text-purple-800 border border-purple-200';
       case 'In Progress': return 'bg-orange-100 text-orange-800 border border-orange-200';
-      case 'Completed': return 'bg-green-100 text-green-800 border border-green-200';
-      case 'Overdue': return 'bg-red-100 text-red-800 border border-red-200';
+      case 'Pending Report Review': return 'bg-blue-100 text-blue-800 border border-blue-200';
+      case 'Done': return 'bg-green-100 text-green-800 border border-green-200';
+      case 'Declined': return 'bg-red-100 text-red-800 border border-red-200';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const canCreate = currentUser?.role === 'County Assembly Clerk' || currentUser?.role === 'Assistant County Assembly Clerk' || ['System Administrator', 'ICT Director'].includes(currentUser?.role || '');
   const userPermissions = currentUser ? rolePermissions[currentUser.role] : null;
-  const canDelete = userPermissions?.delete_resolution || currentUser?.role === 'System Administrator';
+  const canDelete = userPermissions?.delete_resolution || ['System Administrator', 'ICT Director', 'ICT', 'County Assembly Clerk', 'Assistant County Assembly Clerk'].includes(currentUser?.role || '');
 
   const isAnyFilterActive = statusFilter !== 'All' || departmentFilter !== 'All' || committeeFilter !== 'All' || dateFilter !== '';
   const clearAllFilters = () => {
@@ -258,7 +259,7 @@ export function ResolutionsList() {
                         >
                           All
                         </button>
-                        {statusCategories.map(cat => (
+                        {statusCategories.filter(cat => cat.name !== 'Assigned' && cat.name !== 'Declined').map(cat => (
                           <button
                             type="button"
                             key={cat.id}
@@ -479,7 +480,7 @@ export function ResolutionsList() {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="All">All Statuses</option>
-              {statusCategories.map(cat => (
+              {statusCategories.filter(cat => cat.name !== 'Assigned' && cat.name !== 'Declined').map(cat => (
                 <option key={cat.id} value={cat.name}>{cat.name}</option>
               ))}
             </select>
@@ -570,13 +571,18 @@ export function ResolutionsList() {
                       </Link>
                       {canDelete && (
                         <button
-                          onClick={(e) => {
+                          type="button"
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            if (window.confirm(`Are you sure you want to delete resolution ${res.referenceNumber}?`)) {
-                              deleteResolution(res.id);
+                            if (window.confirm(`Are you sure you want to delete resolution ${res.referenceNumber}? This action cannot be undone.`)) {
+                              const success = await deleteResolution(res.id);
+                              if (success && openTabIds.includes(res.id)) {
+                                closeTab(res.id, e);
+                              }
                             }
                           }}
-                          className="text-red-500 hover:text-red-700 cursor-pointer font-medium hover:underline"
+                          className="text-red-600 hover:text-red-800 cursor-pointer font-semibold hover:underline bg-red-50 hover:bg-red-100 px-2 py-1 rounded text-xs border border-red-100 transition-colors"
+                          title="Delete Resolution"
                         >
                           Delete
                         </button>

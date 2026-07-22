@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useAppContext } from '../store';
+// @ts-ignore
+import taitaTavetaLogo from '../assets/images/taita_taveta_logo_1784192264343.jpg';
 import { Shield, KeyRound, Mail, AlertCircle, Lock, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router';
 
 export function Login() {
-  const { login, sendOtp } = useAppContext();
+  const { login, sendOtp, customLogo } = useAppContext();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -78,8 +80,13 @@ export function Login() {
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="h-16 w-16 bg-orange-600 rounded-xl flex items-center justify-center shadow-lg">
-            <Shield className="h-8 w-8 text-white" />
+          <div className="h-24 w-24 bg-white border border-slate-200/80 rounded-2xl flex items-center justify-center p-1.5 shadow-md">
+            <img 
+              src={customLogo || taitaTavetaLogo} 
+              alt="Taita Taveta County Logo" 
+              className="w-full h-full object-contain"
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-bold text-slate-800">
@@ -171,48 +178,56 @@ export function Login() {
               </div>
             </form>
           ) : (
-            <form className="space-y-6" onSubmit={handleLogin}>
-              <div>
-                <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
-                  Enter OTP
-                </label>
-                <div className="mt-1 relative rounded-md shadow-sm">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <KeyRound className="h-5 w-5 text-gray-400" />
+            <>
+              <form className="space-y-6" onSubmit={handleLogin}>
+                <div>
+                  <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                    Enter OTP
+                  </label>
+                  <div className="mt-1 relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <KeyRound className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="otp"
+                      name="otp"
+                      type="text"
+                      required
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value)}
+                      className="focus:ring-orange-500 focus:border-orange-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border tracking-widest text-lg"
+                      placeholder="OTP"
+                    />
                   </div>
-                  <input
-                    id="otp"
-                    name="otp"
-                    type="text"
-                    required
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    className="focus:ring-orange-500 focus:border-orange-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border tracking-widest text-lg"
-                    placeholder="OTP"
-                  />
                 </div>
-              </div>
 
-              <div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
-                >
-                  {loading ? 'Verifying...' : 'Secure Login'}
-                </button>
-              </div>
+                <div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-700 hover:bg-green-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
+                  >
+                    {loading ? 'Verifying...' : 'Secure Login'}
+                  </button>
+                </div>
+              </form>
               
               <div className="text-center mt-4">
                 <button
                   type="button"
-                  onClick={() => setStep('email')}
-                  className="text-sm text-orange-600 hover:text-orange-500"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setError('');
+                    setOtp('');
+                    setPassword('');
+                    setStep('email');
+                  }}
+                  className="text-sm text-orange-600 hover:text-orange-500 font-semibold focus:outline-none"
                 >
                   Back to Email
                 </button>
               </div>
-            </form>
+            </>
           )}
         </div>
       </div>

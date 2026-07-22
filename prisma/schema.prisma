@@ -21,6 +21,7 @@ model User {
   name          String
   password      String   // Added secure password field as requested
   phone         String?  // Phone number for Tilil SMS OTP delivery
+  phoneVerified Boolean  @default(false)
   role          String   // e.g., MCA, Clerk, Clerk Assistant, ICT Officer, etc.
   departmentId  String?
   directorateId String?
@@ -63,6 +64,8 @@ model Resolution {
 model Document {
   id           String     @id @default(uuid())
   name         String
+  fileName     String?
+  description  String?
   url          String
   categoryId   String
   uploadedAt   DateTime   @default(now())

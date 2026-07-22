@@ -15,6 +15,7 @@ import { CreateResolution } from './pages/CreateResolution';
 import { AuditLogs } from './pages/AuditLogs';
 import { SystemSettings } from './pages/SystemSettings';
 import { UserManagement } from './pages/UserManagement';
+import { DatabaseConnection } from './pages/DatabaseConnection';
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/audit-logs" element={<AuditLogs />} />
             <Route path="/settings" element={<SystemSettings />} />
             <Route path="/users" element={<UserManagement />} />
+            <Route path="/database-connection" element={<DatabaseConnection />} />
           </Route>
         </Routes>
       </BrowserRouter>

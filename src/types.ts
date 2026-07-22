@@ -20,17 +20,18 @@ export interface User {
   departmentId?: string;
   directorateId?: string;
   phone?: string;
+  phoneVerified?: boolean;
   password?: string;
 }
 
 export type ResolutionStatus =
   | 'Draft'
-  | 'Pending Approval' // Waiting for Clerk
-  | 'Active' // Approved by Clerk, waiting for County Secretary
-  | 'Assigned' // Assigned to department/directorate
+  | 'Pending Approval'
+  | 'Assigned'
   | 'In Progress'
-  | 'Completed'
-  | 'Overdue';
+  | 'Pending Report Review'
+  | 'Done'
+  | 'Declined';
 
 export interface StatusCategory {
   id: string;
@@ -52,6 +53,8 @@ export interface ResolutionDocument {
   categoryId: string;
   uploadedAt: string;
   uploadedBy: string;
+  fileName?: string;
+  description?: string;
 }
 
 export interface Comment {
