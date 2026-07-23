@@ -14,4 +14,3 @@ coverage/
 *.db-shm
 dev.db
 prisma/*.db
-prisma/dev.db

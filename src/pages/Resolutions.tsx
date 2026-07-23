@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../store';
 import { Link, useNavigate, useParams } from 'react-router';
-import { Plus, Search, Filter, Calendar as CalendarIcon, Clock, ArrowRight, Download, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Search, Filter, Calendar as CalendarIcon, Clock, ArrowRight, Download, X, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import { ResolutionStatus } from '../types';
@@ -345,14 +345,22 @@ export function ResolutionsList() {
                         : "bg-white border-slate-100 hover:border-orange-200 hover:bg-orange-50/10 text-slate-700"
                     )}
                   >
-                    <div className="flex items-center justify-between gap-1">
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
                       <span className="font-mono text-xs font-bold text-slate-700 break-all">{res.referenceNumber}</span>
-                      <span className={clsx(
-                        "px-1.5 py-0.5 rounded-full text-[8px] font-extrabold uppercase shrink-0",
-                        getStatusBadgeColor(res.status)
-                      )}>
-                        {res.status}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {(res.approvedAt || res.approvedBy || ['In Progress', 'Pending Report Review', 'Done'].includes(res.status)) && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300" title="Approved by County Secretary">
+                            <CheckCircle className="h-2.5 w-2.5 text-emerald-600 shrink-0" />
+                            <span>CS Approved</span>
+                          </span>
+                        )}
+                        <span className={clsx(
+                          "px-1.5 py-0.5 rounded-full text-[8px] font-extrabold uppercase shrink-0",
+                          getStatusBadgeColor(res.status)
+                        )}>
+                          {res.status}
+                        </span>
+                      </div>
                     </div>
                     <p className="text-xs text-slate-500 font-medium line-clamp-2 leading-tight">{res.title}</p>
                   </div>
@@ -552,12 +560,20 @@ export function ResolutionsList() {
                   <td className="px-4 py-3 font-semibold text-slate-700">{res.referenceNumber}</td>
                   <td className="px-4 py-3 font-medium text-slate-600 truncate max-w-xs">{res.title}</td>
                   <td className="px-4 py-3">
-                    <span className={clsx(
-                      "px-2 py-1 rounded-full text-[9px] font-bold uppercase",
-                      getStatusBadgeColor(res.status)
-                    )}>
-                      {res.status}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(res.approvedAt || res.approvedBy || ['In Progress', 'Pending Report Review', 'Done'].includes(res.status)) && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs" title="Approved by County Secretary">
+                          <CheckCircle className="h-3 w-3 text-emerald-600 shrink-0" />
+                          <span>Approved by CS</span>
+                        </span>
+                      )}
+                      <span className={clsx(
+                        "px-2 py-1 rounded-full text-[9px] font-bold uppercase",
+                        getStatusBadgeColor(res.status)
+                      )}>
+                        {res.status}
+                      </span>
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-slate-500 font-bold italic">{res.implementationTimeDays} Days</td>
                   <td className="px-4 py-3">

@@ -257,8 +257,8 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
         if (ext) downloadName = `${downloadName}.${ext}`;
       }
 
-      // 1. Data URLs, Blob URLs, or external HTTP URLs
-      if (url && (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://'))) {
+      // 1. Data URLs, Blob URLs, server paths (/Private/...), or external HTTP URLs
+      if (url && (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/Private/') || url.startsWith('Private/'))) {
         const response = await fetch(url);
         const blob = await response.blob();
         
@@ -342,11 +342,17 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
   
   const isLocked = resolution.status === 'Done' && !isSysAdmin;
 
+  const isApprovedByCS = Boolean(
+    resolution.approvedAt ||
+    resolution.approvedBy ||
+    ['In Progress', 'Pending Report Review', 'Done'].includes(resolution.status)
+  );
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header Info */}
       <div className="bg-white shadow-sm rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-4 py-5 sm:px-6 flex justify-between items-start bg-slate-50 border-b border-slate-200">
+        <div className="px-4 py-5 sm:px-6 flex flex-col sm:flex-row justify-between items-start gap-4 bg-slate-50 border-b border-slate-200">
           <div>
             <h3 className="text-lg leading-6 font-bold text-slate-700 font-mono">
               {resolution.referenceNumber}
@@ -355,7 +361,13 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
               {resolution.title}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {isApprovedByCS && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-xs" title="Approved by County Secretary">
+                <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Approved by County Secretary</span>
+              </span>
+            )}
             <span className={clsx(
               "px-3 py-1 rounded-full text-sm font-semibold shadow-sm",
               getStatusBadgeColor(resolution.status)
@@ -384,6 +396,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
         </div>
         <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
           <dl className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+
             <div className="sm:col-span-4">
               <dt className="text-sm font-medium text-gray-500">Description</dt>
               <dd className="mt-1 text-sm text-gray-900 whitespace-pre-line bg-gray-50 p-4 rounded-md border border-gray-100">
@@ -485,10 +498,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
           <div className="flex items-start gap-3 border-b border-yellow-100 pb-4">
             <ShieldCheck className="h-6 w-6 text-yellow-600" />
             <div>
-              <h3 className="text-sm font-bold text-yellow-900 uppercase tracking-wide">County Secretary Review: Approve & Route to Executive</h3>
-              <p className="text-xs text-yellow-700 mt-1">
-                As County Secretary, please review and approve this resolution to initiate execution. Since the target departments and oversight committees are already assigned by the Clerk at registration, approving this will automatically dispatch notifications to the respective Department Heads (CECM & CCO) and Oversight Committees, and transition the status directly to 'In Progress'.
-              </p>
+              <h3 className="text-sm font-bold text-yellow-900 uppercase tracking-wide">Approve and assign to respective department</h3>
             </div>
           </div>
 
@@ -541,280 +551,318 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
         </div>
       )}
 
-      {canUploadEvidence && (
-        <div className="bg-white border border-orange-200 shadow-sm rounded-xl overflow-hidden">
-          <div className="p-4 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
-            <div className="flex">
-              <Activity className="h-5 w-5 text-orange-500 mr-2" />
+      {(canUploadEvidence || canSubmitReport || (resolution.executiveUpdates && resolution.executiveUpdates.length > 0)) && (
+        <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-6 space-y-5">
+          <div className="border-b border-slate-200 pb-4 flex items-center justify-between">
+            <div className="flex items-center">
+              <Activity className="h-5 w-5 text-slate-700 mr-2.5 shrink-0" />
               <div>
-                <h3 className="text-sm font-bold text-orange-900">Upload Evidence & Status Update</h3>
-                <p className="text-xs text-orange-700">Add an ongoing implementation update or upload evidence files.</p>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Departmental Implementation</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Manage departmental implementation progress updates, evidence uploads, and report submissions.</p>
               </div>
             </div>
-            {!showExecReply && (
-              <button
-                onClick={() => {
-                  setShowExecReply(true);
-                  setShowSubmitReportForm(false);
-                }}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-orange-700 bg-white border border-orange-300 hover:bg-orange-50 cursor-pointer"
-              >
-                Add Update / Evidence
-              </button>
-            )}
           </div>
 
-          {showExecReply && (
-            <form onSubmit={handleExecReplySubmit} className="p-6 bg-white space-y-4 border-b border-slate-100">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Progress Details / Remarks</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={execReplyData.text}
-                  onChange={(e) => setExecReplyData({...execReplyData, text: e.target.value})}
-                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
-                  placeholder="Provide specific details about the ongoing implementation progress..."
-                />
-              </div>
+          <div className="space-y-4">
+            {canUploadEvidence && (
+              <div className="bg-orange-50/70 border border-orange-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start sm:items-center">
+                    <Activity className="h-5 w-5 text-orange-600 mr-2.5 shrink-0 mt-0.5 sm:mt-0" />
+                    <div>
+                      <h4 className="text-sm font-bold text-orange-950">Upload Evidence & Status Update</h4>
+                      <p className="text-xs text-orange-800/90 mt-0.5">Add an ongoing implementation update or upload evidence files.</p>
+                    </div>
+                  </div>
+                  {!showExecReply && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowExecReply(true);
+                        setShowSubmitReportForm(false);
+                      }}
+                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-orange-800 bg-white border border-orange-300 hover:bg-orange-100/50 shadow-2xs cursor-pointer shrink-0"
+                    >
+                      Add Update / Evidence
+                    </button>
+                  )}
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Evidence File (Optional)</label>
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center justify-center py-2 px-3 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 bg-white cursor-pointer transition-colors w-full">
-                      <Upload className={`h-4 w-4 mr-2 ${selectedEvidenceFile ? 'text-green-500' : 'text-gray-400'}`} />
-                      <span className="truncate font-medium max-w-[150px]">
-                        {selectedEvidenceFile ? `✓ ${selectedEvidenceFile.name}` : 'Choose File...'}
-                      </span>
-                      <input
-                        type="file"
-                        className="sr-only"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,*/*"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setSelectedEvidenceFile(file);
-                            setExecReplyData({
-                              ...execReplyData,
-                              documentName: file.name
-                            });
-                          }
-                        }}
-                      />
-                    </label>
-                    {selectedEvidenceFile && (
+                {showExecReply && (
+                  <form onSubmit={handleExecReplySubmit} className="p-5 bg-white border-t border-orange-200 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Add Progress Update / Evidence</h5>
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedEvidenceFile(null);
-                          setExecReplyData({ ...execReplyData, documentName: '' });
-                        }}
-                        className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 bg-white cursor-pointer"
-                        title="Remove file"
+                        onClick={() => setShowExecReply(false)}
+                        className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
                       >
                         <X className="h-4 w-4" />
                       </button>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Document Name / Label</label>
-                  <input
-                    type="text"
-                    value={execReplyData.documentName}
-                    onChange={(e) => setExecReplyData({...execReplyData, documentName: e.target.value})}
-                    className="mt-1 block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-orange-500"
-                    placeholder="e.g. Site Photo, Receipts..."
-                  />
-                </div>
-              </div>
-
-              {execReplyData.documentName && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Attachment Description</label>
-                  <input
-                    type="text"
-                    value={evidenceDocDesc}
-                    onChange={(e) => setEvidenceDocDesc(e.target.value)}
-                    className="mt-1 block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-orange-500"
-                    placeholder="Brief explanation of this attachment..."
-                  />
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowExecReply(false)}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 border border-slate-200 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!execReplyData.text}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 cursor-pointer"
-                >
-                  Submit Update
-                </button>
-              </div>
-            </form>
-          )}
-
-          {resolution.executiveUpdates && resolution.executiveUpdates.length > 0 && (
-            <div className="bg-gray-50 border-t border-gray-200">
-              <ul className="divide-y divide-gray-200">
-                {resolution.executiveUpdates.map(update => (
-                  <li key={update.id} className="p-4 flex space-x-4">
-                    <div className="flex-shrink-0">
-                      <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600 uppercase">
-                        {update.authorName.substring(0, 2)}
-                      </div>
                     </div>
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <span className="font-medium text-gray-900">{update.authorName}</span>
-                          <span className="text-gray-500 text-xs ml-2">({update.authorRole})</span>
-                          <span className="text-gray-400 text-xs ml-2">{format(new Date(update.createdAt), 'MMM d, yyyy HH:mm')}</span>
-                        </div>
-                      </div>
-                      
-                      {update.text && (
-                        <div className="text-sm text-gray-700 mt-1 whitespace-pre-wrap bg-white p-3 border border-gray-100 rounded-md">
-                          {update.text}
-                        </div>
-                      )}
-                      
-                      {update.documents && update.documents.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {update.documents.map(doc => (
-                            <div key={doc.id} className="flex items-center text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded w-max border border-orange-100">
-                              <FileText className="h-4 w-4 mr-1" />
-                              <button
-                                onClick={() => handleDownloadFile(doc.name, doc.url, doc.fileName)}
-                                className="hover:underline cursor-pointer text-left focus:outline-none"
-                              >
-                                {doc.name}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {canSubmitReport && (
-        <div className="bg-white border border-blue-200 shadow-sm rounded-xl overflow-hidden mt-6">
-          <div className="p-4 bg-blue-50 border-b border-blue-100 flex justify-between items-center">
-            <div className="flex">
-              <FileText className="h-5 w-5 text-blue-500 mr-2" />
-              <div>
-                <h3 className="text-sm font-bold text-blue-900">Submit Implementation Reports</h3>
-                <p className="text-xs text-blue-700">Conclude implementation and forward a formal report to the Assembly for review.</p>
-              </div>
-            </div>
-            {!showSubmitReportForm && (
-              <button
-                onClick={() => {
-                  setShowSubmitReportForm(true);
-                  setShowExecReply(false);
-                }}
-                className="px-3 py-1.5 text-xs font-semibold rounded-lg text-blue-700 bg-white border border-blue-300 hover:bg-blue-50 cursor-pointer"
-              >
-                Submit Reports
-              </button>
-            )}
-          </div>
-
-          {showSubmitReportForm && (
-            <form onSubmit={handleSubmitFinalReport} className="p-6 bg-white space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report Summary & Content (Required)</label>
-                <textarea
-                  required
-                  rows={4}
-                  value={submitReportText}
-                  onChange={(e) => setSubmitReportText(e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-blue-500"
-                  placeholder="Provide a comprehensive summary of the implemented works and outcomes..."
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report File (Optional)</label>
-                  <div className="flex items-center gap-2">
-                    <label className="flex items-center justify-center py-2 px-3 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 bg-white cursor-pointer transition-colors w-full">
-                      <Upload className={`h-4 w-4 mr-2 ${selectedReportFile ? 'text-green-500' : 'text-gray-400'}`} />
-                      <span className="truncate font-medium max-w-[150px]">
-                        {selectedReportFile ? `✓ ${selectedReportFile.name}` : 'Choose File...'}
-                      </span>
-                      <input
-                        type="file"
-                        className="sr-only"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            setSelectedReportFile(file);
-                            setSubmitReportDocName(file.name);
-                          }
-                        }}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Progress Details / Remarks</label>
+                      <textarea
+                        required
+                        rows={3}
+                        value={execReplyData.text}
+                        onChange={(e) => setExecReplyData({...execReplyData, text: e.target.value})}
+                        className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                        placeholder="Provide specific details about the ongoing implementation progress..."
                       />
-                    </label>
-                    {selectedReportFile && (
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Evidence File (Optional)</label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center justify-center py-2 px-3 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 bg-white cursor-pointer transition-colors w-full">
+                            <Upload className={`h-4 w-4 mr-2 ${selectedEvidenceFile ? 'text-green-500' : 'text-gray-400'}`} />
+                            <span className="truncate font-medium max-w-[150px]">
+                              {selectedEvidenceFile ? `✓ ${selectedEvidenceFile.name}` : 'Choose File...'}
+                            </span>
+                            <input
+                              type="file"
+                              className="sr-only"
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,*/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setSelectedEvidenceFile(file);
+                                  setExecReplyData({
+                                    ...execReplyData,
+                                    documentName: file.name
+                                  });
+                                }
+                              }}
+                            />
+                          </label>
+                          {selectedEvidenceFile && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedEvidenceFile(null);
+                                setExecReplyData({ ...execReplyData, documentName: '' });
+                              }}
+                              className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 bg-white cursor-pointer"
+                              title="Remove file"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Document Name / Label</label>
+                        <input
+                          type="text"
+                          value={execReplyData.documentName}
+                          onChange={(e) => setExecReplyData({...execReplyData, documentName: e.target.value})}
+                          className="mt-1 block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-orange-500"
+                          placeholder="e.g. Site Photo, Receipts..."
+                        />
+                      </div>
+                    </div>
+
+                    {execReplyData.documentName && (
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Attachment Description</label>
+                        <input
+                          type="text"
+                          value={evidenceDocDesc}
+                          onChange={(e) => setEvidenceDocDesc(e.target.value)}
+                          className="mt-1 block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-orange-500"
+                          placeholder="Brief explanation of this attachment..."
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedReportFile(null);
-                          setSubmitReportDocName('');
-                        }}
-                        className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 bg-white cursor-pointer"
-                        title="Remove file"
+                        onClick={() => setShowExecReply(false)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 border border-slate-200 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!execReplyData.text}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-orange-600 hover:bg-orange-700 disabled:opacity-50 cursor-pointer"
+                      >
+                        Submit Update
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {canSubmitReport && (
+              <div className="bg-blue-50/70 border border-blue-200 rounded-xl overflow-hidden shadow-2xs">
+                <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start sm:items-center">
+                    <FileText className="h-5 w-5 text-blue-600 mr-2.5 shrink-0 mt-0.5 sm:mt-0" />
+                    <div>
+                      <h4 className="text-sm font-bold text-blue-950">Submit Implementation Reports</h4>
+                      <p className="text-xs text-blue-800/90 mt-0.5">Conclude implementation and forward a formal report to the Assembly for review.</p>
+                    </div>
+                  </div>
+                  {!showSubmitReportForm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSubmitReportForm(true);
+                        setShowExecReply(false);
+                      }}
+                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-blue-800 bg-white border border-blue-300 hover:bg-blue-100/50 shadow-2xs cursor-pointer shrink-0"
+                    >
+                      Submit Reports
+                    </button>
+                  )}
+                </div>
+
+                {showSubmitReportForm && (
+                  <form onSubmit={handleSubmitFinalReport} className="p-5 bg-white border-t border-blue-200 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Submit Formal Implementation Report</h5>
+                      <button
+                        type="button"
+                        onClick={() => setShowSubmitReportForm(false)}
+                        className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
                       >
                         <X className="h-4 w-4" />
                       </button>
-                    )}
-                  </div>
-                </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report Summary & Content (Required)</label>
+                      <textarea
+                        required
+                        rows={4}
+                        value={submitReportText}
+                        onChange={(e) => setSubmitReportText(e.target.value)}
+                        className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-blue-500"
+                        placeholder="Provide a comprehensive summary of the implemented works and outcomes..."
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report Document Name / Label</label>
-                  <input
-                    type="text"
-                    value={submitReportDocName}
-                    onChange={(e) => setSubmitReportDocName(e.target.value)}
-                    className="block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-blue-500"
-                    placeholder="e.g. Voi Hospital Upgrade Phase 1 Report.pdf"
-                  />
-                </div>
-              </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report File (Optional)</label>
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center justify-center py-2 px-3 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 bg-white cursor-pointer transition-colors w-full">
+                            <Upload className={`h-4 w-4 mr-2 ${selectedReportFile ? 'text-green-500' : 'text-gray-400'}`} />
+                            <span className="truncate font-medium max-w-[150px]">
+                              {selectedReportFile ? `✓ ${selectedReportFile.name}` : 'Choose File...'}
+                            </span>
+                            <input
+                              type="file"
+                              className="sr-only"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setSelectedReportFile(file);
+                                  setSubmitReportDocName(file.name);
+                                }
+                              }}
+                            />
+                          </label>
+                          {selectedReportFile && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedReportFile(null);
+                                setSubmitReportDocName('');
+                              }}
+                              className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 bg-white cursor-pointer"
+                              title="Remove file"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowSubmitReportForm(false)}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 border border-slate-200 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
-                >
-                  Submit Report to Assembly
-                </button>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Report Document Name / Label</label>
+                        <input
+                          type="text"
+                          value={submitReportDocName}
+                          onChange={(e) => setSubmitReportDocName(e.target.value)}
+                          className="block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-blue-500"
+                          placeholder="e.g. Voi Hospital Upgrade Phase 1 Report.pdf"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowSubmitReportForm(false)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-50 border border-slate-200 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 cursor-pointer"
+                      >
+                        Submit Report to Assembly
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
-            </form>
-          )}
+            )}
+
+            {resolution.executiveUpdates && resolution.executiveUpdates.length > 0 && (
+              <div className="bg-gray-50 border border-slate-200 rounded-xl overflow-hidden mt-2">
+                <ul className="divide-y divide-gray-200">
+                  {resolution.executiveUpdates.map(update => (
+                    <li key={update.id} className="p-4 flex space-x-4">
+                      <div className="flex-shrink-0">
+                        <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-600 uppercase">
+                          {update.authorName.substring(0, 2)}
+                        </div>
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <span className="font-medium text-gray-900">{update.authorName}</span>
+                            <span className="text-gray-500 text-xs ml-2">({update.authorRole})</span>
+                            <span className="text-gray-400 text-xs ml-2">{format(new Date(update.createdAt), 'MMM d, yyyy HH:mm')}</span>
+                          </div>
+                        </div>
+                        
+                        {update.text && (
+                          <div className="text-sm text-gray-700 mt-1 whitespace-pre-wrap bg-white p-3 border border-gray-100 rounded-md">
+                            {update.text}
+                          </div>
+                        )}
+                        
+                        {update.documents && update.documents.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            {update.documents.map(doc => (
+                              <div key={doc.id} className="flex items-center text-sm text-orange-600 bg-orange-50 px-2 py-1 rounded w-max border border-orange-100">
+                                <FileText className="h-4 w-4 mr-1" />
+                                <button
+                                  onClick={() => handleDownloadFile(doc.name, doc.url, doc.fileName)}
+                                  className="hover:underline cursor-pointer text-left focus:outline-none"
+                                >
+                                  {doc.name}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -960,10 +1008,10 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
                         {!selectedFile && <p className="pl-1 text-slate-500">or drag & drop</p>}
                       </div>
                       {selectedFile ? (
-                        <div className="flex items-center justify-center gap-2 mt-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                          <span>{selectedFile.name}</span>
-                          <span className="text-[10px] text-slate-500 font-mono font-normal">
+                        <div className="flex items-center justify-center gap-2 mt-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 max-w-full flex-wrap">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
+                          <span className="break-all break-words text-center min-w-0">{selectedFile.name}</span>
+                          <span className="text-[10px] text-slate-500 font-mono font-normal shrink-0">
                             ({(selectedFile.size / 1024).toFixed(0)} KB)
                           </span>
                         </div>
@@ -999,9 +1047,9 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
                       return (
                         <li key={doc.id} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
                           <div className="w-0 flex-1 flex flex-col">
-                            <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
                               <FileText className="flex-shrink-0 h-5 w-5 text-orange-500 shrink-0" />
-                              <span className="font-bold text-gray-900 truncate">{displayName}</span>
+                              <span className="font-bold text-gray-900 break-all break-words min-w-0">{displayName}</span>
                               {displayName.includes('.') && (
                                 <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded font-bold shrink-0 border border-slate-200">
                                   {displayName.split('.').pop()}

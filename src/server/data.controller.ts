@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, HttpException, HttpStatus, Logger, Inject } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
+import { savePayloadToDisk } from './file-storage.util';
 
 function safeParseJson(str: string | null | undefined, fallback: any = {}) {
   if (!str) return fallback;
@@ -79,15 +80,19 @@ export class DataController {
           directorateId,
           createdBy,
           documents: documents && Array.isArray(documents) ? {
-            create: documents.map((doc: any) => ({
-              name: doc.name || doc.fileName || 'Document',
-              fileName: doc.fileName || doc.name,
-              description: doc.description || (doc.name !== doc.fileName ? doc.name : ''),
-              url: doc.url || '#',
-              categoryId: doc.categoryId,
-              uploadedBy: doc.uploadedBy || createdBy,
-              uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date(),
-            }))
+            create: documents.map((doc: any) => {
+              const fname = doc.fileName || doc.name || 'Document';
+              const diskUrl = savePayloadToDisk(doc.url, fname);
+              return {
+                name: doc.name || fname,
+                fileName: fname,
+                description: doc.description || (doc.name !== doc.fileName ? doc.name : ''),
+                url: diskUrl,
+                categoryId: doc.categoryId,
+                uploadedBy: doc.uploadedBy || createdBy,
+                uploadedAt: doc.uploadedAt ? new Date(doc.uploadedAt) : new Date(),
+              };
+            })
           } : undefined
         },
         include: {
@@ -141,12 +146,14 @@ export class DataController {
   async addDocument(@Param('id') id: string, @Body() body: any) {
     try {
       const { name, url, categoryId, uploadedBy, fileName, description } = body;
+      const fname = fileName || (name && name.includes('.') ? name : 'Document');
+      const diskUrl = savePayloadToDisk(url, fname);
       const doc = await this.prisma.document.create({
         data: {
-          name: name || fileName || 'Document',
-          fileName: fileName || (name && name.includes('.') ? name : undefined),
+          name: name || fname,
+          fileName: fname,
           description: description || (name && name !== fileName ? name : undefined),
-          url,
+          url: diskUrl,
           categoryId,
           uploadedBy,
           resolutionId: id,
@@ -775,7 +782,10 @@ export class DataController {
   @Post('settings/logo')
   async updateCustomLogo(@Body() body: { logo: string | null }) {
     try {
-      const { logo } = body;
+      let { logo } = body;
+      if (logo && logo.startsWith('data:')) {
+        logo = savePayloadToDisk(logo, 'custom_logo.png');
+      }
       const existing = await this.prisma.systemItem.findFirst({
         where: {
           type: 'settings',

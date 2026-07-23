@@ -27,6 +27,15 @@ class ViteAndStaticFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
+    // Serve static uploaded files/images from Private folder
+    if (request.path.startsWith('/Private')) {
+      const privateFilePath = path.join(process.cwd(), request.path);
+      if (fs.existsSync(privateFilePath) && fs.statSync(privateFilePath).isFile()) {
+        response.sendFile(privateFilePath);
+        return;
+      }
+    }
+
     // If it's an API request, let NestJS return the standard 404 response
     if (request.path.startsWith('/api')) {
       const status = exception.getStatus();
@@ -73,6 +82,7 @@ async function bootstrap() {
   });
 
   // Basic middlewares
+  appProxy.use('/Private', express.static(path.join(process.cwd(), 'Private')));
   appProxy.use(express.json({ limit: '200mb' }));
   appProxy.use(express.urlencoded({ limit: '200mb', extended: true }));
 

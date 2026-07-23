@@ -371,8 +371,8 @@ export function CreateResolution() {
                           placeholder="e.g. Official Signed Hansard Copy, Minutes of Committee Meeting..."
                         />
                       </div>
-                      <div className="flex gap-3">
-                        <div className="flex-1">
+                      <div className="flex flex-col sm:flex-row gap-3 min-w-0">
+                        <div className="w-full sm:w-1/3 min-w-0">
                           <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Category</label>
                           <select
                             value={doc.categoryId}
@@ -384,22 +384,22 @@ export function CreateResolution() {
                             ))}
                           </select>
                         </div>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Attach Document File</label>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0 w-full">
                             <label className={`flex items-center justify-center w-full py-2 px-3 border border-dashed rounded-lg text-sm transition-all cursor-pointer overflow-hidden ${doc.fileName ? 'border-emerald-300 bg-emerald-50/70 text-emerald-800' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'}`}>
                               {doc.fileName ? (
-                                <div className="flex items-center gap-1.5 min-w-0">
+                                <div className="flex items-center gap-1.5 min-w-0 w-full flex-wrap justify-start sm:justify-center py-0.5">
                                   <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                                  <span className="text-xs font-bold text-emerald-800 truncate">{doc.fileName}</span>
+                                  <span className="text-xs font-bold text-emerald-800 break-all break-words whitespace-normal text-left sm:text-center min-w-0">{doc.fileName}</span>
                                   {doc.fileName.includes('.') && (
-                                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.2 bg-emerald-200/80 text-emerald-900 rounded font-black shrink-0">
+                                    <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 bg-emerald-200/80 text-emerald-900 rounded font-black shrink-0">
                                       {doc.fileName.split('.').pop()}
                                     </span>
                                   )}
                                 </div>
                               ) : (
-                                <div className="flex items-center text-xs font-medium text-slate-600">
+                                <div className="flex items-center text-xs font-medium text-slate-600 min-w-0">
                                   <Upload className="h-4 w-4 mr-2 text-slate-400 shrink-0" />
                                   <span className="truncate">Choose File (PDF, Word, Excel, etc)...</span>
                                 </div>
