@@ -50,6 +50,9 @@ model Resolution {
   departmentId           String?
   committeeId            String?
   directorateId          String?
+  committeeRemarks       String?
+  committeeMinutesDocName String?
+  committeeMinutesUrl    String?
   createdAt              DateTime           @default(now())
   createdBy              String             // User ID
   approvedAt             DateTime?

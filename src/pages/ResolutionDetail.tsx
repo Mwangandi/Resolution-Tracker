@@ -60,6 +60,12 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
   const [showSubmitReportForm, setShowSubmitReportForm] = useState<boolean>(false);
   const [evidenceDocDesc, setEvidenceDocDesc] = useState<string>('');
 
+  // Committee Remarks & Minutes state
+  const [showCommitteeModal, setShowCommitteeModal] = useState<boolean>(false);
+  const [committeeRemarksText, setCommitteeRemarksText] = useState<string>('');
+  const [committeeMinutesDocName, setCommitteeMinutesDocName] = useState<string>('');
+  const [selectedCommitteeMinutesFile, setSelectedCommitteeMinutesFile] = useState<File | null>(null);
+
   const { addExecutiveUpdate, approveExecutiveUpdate } = useAppContext();
 
   const resolution = resolutions.find(r => r.id === id);
@@ -237,6 +243,53 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
     addComment(resolution.id, `⚠️ Request for More Information: ${requestMoreInfoNote}`);
     setRequestMoreInfoNote('');
     setShowRequestMoreInfo(false);
+  };
+
+  const handleSaveCommitteeRemarksAndMinutes = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!committeeRemarksText.trim() && !selectedCommitteeMinutesFile && !committeeMinutesDocName.trim()) {
+      alert('Please enter committee remarks or attach committee minutes file.');
+      return;
+    }
+
+    const saveAction = (fileUrl?: string) => {
+      const minutesLabel = committeeMinutesDocName.trim() || selectedCommitteeMinutesFile?.name || '';
+      
+      if (selectedCommitteeMinutesFile && fileUrl) {
+        addDocument(resolution.id, {
+          name: minutesLabel ? (minutesLabel.startsWith('Implementation Committee Minutes:') ? minutesLabel : `Implementation Committee Minutes: ${minutesLabel}`) : selectedCommitteeMinutesFile.name,
+          fileName: selectedCommitteeMinutesFile.name,
+          description: 'Implementation Committee Meeting Minutes',
+          categoryId: 'cat3',
+          url: fileUrl,
+        });
+      }
+
+      updateResolutionStatus(resolution.id, resolution.status, {
+        committeeRemarks: committeeRemarksText.trim() || resolution.committeeRemarks,
+        committeeMinutesDocName: minutesLabel ? (minutesLabel.startsWith('Implementation Committee Minutes:') ? minutesLabel : `Implementation Committee Minutes: ${minutesLabel}`) : resolution.committeeMinutesDocName,
+        committeeMinutesUrl: fileUrl || resolution.committeeMinutesUrl,
+      });
+
+      addComment(
+        resolution.id,
+        `📋 Implementation Committee Remarks & Minutes updated by ${currentUser?.name || 'Committee Officer'}.${committeeRemarksText.trim() ? `\nRemarks: ${committeeRemarksText.trim()}` : ''}${minutesLabel ? `\nAttached Minutes: ${minutesLabel}` : ''}`
+      );
+
+      setShowCommitteeModal(false);
+      setSelectedCommitteeMinutesFile(null);
+      setCommitteeMinutesDocName('');
+    };
+
+    if (selectedCommitteeMinutesFile) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        saveAction(reader.result as string);
+      };
+      reader.readAsDataURL(selectedCommitteeMinutesFile);
+    } else {
+      saveAction();
+    }
   };
 
   const handleAddComment = (e: React.FormEvent) => {
@@ -865,6 +918,172 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
           </div>
         </div>
       )}
+
+      {/* Implementation Committee Remarks & Minutes Section */}
+      <div className="bg-white shadow-sm rounded-xl border border-purple-200 p-6 space-y-5">
+        <div className="border-b border-purple-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center">
+            <ShieldCheck className="h-5 w-5 text-purple-700 mr-2.5 shrink-0" />
+            <div>
+              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide">Implementation Committee Remarks & Minutes</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Record committee remarks, observations, and attach official committee meeting minutes.</p>
+            </div>
+          </div>
+          {!showCommitteeModal && (
+            <button
+              type="button"
+              onClick={() => {
+                setCommitteeRemarksText(resolution.committeeRemarks || '');
+                setShowCommitteeModal(true);
+              }}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-purple-900 bg-purple-50 hover:bg-purple-100/80 border border-purple-300 shadow-2xs cursor-pointer shrink-0 self-start sm:self-auto"
+            >
+              {resolution.committeeRemarks || resolution.committeeMinutesDocName ? 'Edit Remarks & Minutes' : '+ Add Remarks & Minutes'}
+            </button>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          {(resolution.committeeRemarks || resolution.committeeMinutesDocName) && !showCommitteeModal && (
+            <div className="bg-purple-50/50 border border-purple-200 rounded-xl p-4 space-y-3">
+              {resolution.committeeRemarks && (
+                <div>
+                  <span className="text-[11px] font-bold text-purple-900 uppercase tracking-wider block mb-1">Committee Remarks:</span>
+                  <p className="text-xs text-slate-700 bg-white p-3.5 rounded-lg border border-purple-100 whitespace-pre-wrap leading-relaxed shadow-2xs">
+                    {resolution.committeeRemarks}
+                  </p>
+                </div>
+              )}
+
+              {resolution.committeeMinutesDocName && (
+                <div>
+                  <span className="text-[11px] font-bold text-purple-900 uppercase tracking-wider block mb-1">Committee Minutes Document:</span>
+                  <div className="flex items-center text-xs font-medium text-purple-800 bg-white px-3 py-2 rounded-lg border border-purple-200 shadow-2xs w-max">
+                    <FileText className="h-4 w-4 mr-1.5 text-purple-600 shrink-0" />
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadFile(resolution.committeeMinutesDocName!, resolution.committeeMinutesUrl || '#', 'Committee_Minutes.pdf')}
+                      className="hover:underline cursor-pointer text-left font-semibold"
+                    >
+                      {resolution.committeeMinutesDocName}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {showCommitteeModal && (
+            <form onSubmit={handleSaveCommitteeRemarksAndMinutes} className="bg-purple-50/40 border border-purple-200 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-purple-100 pb-2">
+                <h5 className="text-xs font-bold text-purple-900 uppercase tracking-wider">Record Committee Remarks & Attach Minutes</h5>
+                <button
+                  type="button"
+                  onClick={() => setShowCommitteeModal(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Implementation Committee Remarks</label>
+                <textarea
+                  rows={3}
+                  value={committeeRemarksText}
+                  onChange={(e) => setCommitteeRemarksText(e.target.value)}
+                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-purple-500 focus:border-purple-500 bg-white"
+                  placeholder="Provide official observations, findings, or directives from the Implementation Committee..."
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Committee Minutes File (Optional)</label>
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center justify-center py-2 px-3 border border-dashed border-gray-300 rounded-lg text-xs text-gray-600 hover:bg-gray-50 bg-white cursor-pointer transition-colors w-full">
+                      <Upload className={`h-4 w-4 mr-2 ${selectedCommitteeMinutesFile ? 'text-purple-600' : 'text-gray-400'}`} />
+                      <span className="truncate font-medium max-w-[150px]">
+                        {selectedCommitteeMinutesFile ? `✓ ${selectedCommitteeMinutesFile.name}` : 'Choose File...'}
+                      </span>
+                      <input
+                        type="file"
+                        className="sr-only"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,*/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setSelectedCommitteeMinutesFile(file);
+                            if (!committeeMinutesDocName) {
+                              setCommitteeMinutesDocName(file.name);
+                            }
+                          }
+                        }}
+                      />
+                    </label>
+                    {selectedCommitteeMinutesFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCommitteeMinutesFile(null);
+                        }}
+                        className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 bg-white cursor-pointer"
+                        title="Remove file"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Minutes Document Title / Label</label>
+                  <input
+                    type="text"
+                    value={committeeMinutesDocName}
+                    onChange={(e) => setCommitteeMinutesDocName(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-lg py-1.5 px-3 text-sm focus:outline-none focus:ring-purple-500 bg-white"
+                    placeholder="e.g. Implementation Committee Meeting Minutes #4.pdf"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-purple-100 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCommitteeModal(false)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 bg-white border border-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-purple-700 hover:bg-purple-800 cursor-pointer"
+                >
+                  Save Remarks & Minutes
+                </button>
+              </div>
+            </form>
+          )}
+
+          {!resolution.committeeRemarks && !resolution.committeeMinutesDocName && !showCommitteeModal && (
+            <div className="text-center py-6 bg-slate-50/70 border border-dashed border-slate-200 rounded-xl">
+              <ShieldCheck className="h-8 w-8 text-purple-300 mx-auto mb-2" />
+              <p className="text-xs text-slate-500 font-medium">No committee remarks or meeting minutes recorded yet.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setCommitteeRemarksText('');
+                  setShowCommitteeModal(true);
+                }}
+                className="mt-2.5 px-3.5 py-1.5 text-xs font-semibold rounded-lg text-purple-800 bg-purple-50 hover:bg-purple-100 border border-purple-200 cursor-pointer inline-flex items-center gap-1.5"
+              >
+                + Add Committee Remarks & Minutes
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
 
       {canReviewReport && (
         <div className="bg-white border border-indigo-200 p-6 shadow-sm rounded-xl space-y-4">

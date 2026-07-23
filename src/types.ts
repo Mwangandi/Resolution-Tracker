@@ -102,6 +102,11 @@ export interface Resolution {
   executiveUpdates?: ExecutiveUpdate[];
 
   
+  // Implementation Committee Remarks & Minutes
+  committeeRemarks?: string;
+  committeeMinutesDocName?: string;
+  committeeMinutesUrl?: string;
+
   // Assignment / Context
   departmentId?: string;
   committeeId?: string;
