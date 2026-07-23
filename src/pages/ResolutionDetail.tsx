@@ -229,20 +229,91 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
   };
 
   const handleAcceptReport = () => {
-    updateResolutionStatus(resolution.id, 'Done');
-    addComment(resolution.id, `✓ County Assembly accepted the report and closed the resolution.`);
+    const minutesLabel = committeeMinutesDocName.trim() || selectedCommitteeMinutesFile?.name || '';
+    
+    const finalizeAccept = (fileUrl?: string) => {
+      if (selectedCommitteeMinutesFile && fileUrl) {
+        addDocument(resolution.id, {
+          name: minutesLabel ? (minutesLabel.startsWith('Implementation Committee Minutes:') ? minutesLabel : `Implementation Committee Minutes: ${minutesLabel}`) : selectedCommitteeMinutesFile.name,
+          fileName: selectedCommitteeMinutesFile.name,
+          description: 'Implementation Committee Meeting Minutes',
+          categoryId: 'cat3',
+          url: fileUrl,
+        });
+      }
+
+      updateResolutionStatus(resolution.id, 'Done', {
+        committeeRemarks: committeeRemarksText.trim() || resolution.committeeRemarks,
+        committeeMinutesDocName: minutesLabel ? (minutesLabel.startsWith('Implementation Committee Minutes:') ? minutesLabel : `Implementation Committee Minutes: ${minutesLabel}`) : resolution.committeeMinutesDocName,
+        committeeMinutesUrl: fileUrl || resolution.committeeMinutesUrl,
+      });
+
+      addComment(
+        resolution.id, 
+        `✓ Implementation Committee evaluated implementation as SATISFACTORY.\nImplementation Report accepted, committee remarks & minutes attached, and resolution concluded.`
+      );
+
+      setSelectedCommitteeMinutesFile(null);
+      setCommitteeMinutesDocName('');
+    };
+
+    if (selectedCommitteeMinutesFile) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        finalizeAccept(reader.result as string);
+      };
+      reader.readAsDataURL(selectedCommitteeMinutesFile);
+    } else {
+      finalizeAccept();
+    }
   };
 
   const handleRequestMoreInfo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!requestMoreInfoNote.trim()) {
-      alert('Please provide a reason / note for requesting more information');
+      alert('Please provide a reason / note explaining why implementation was not satisfactory or what additional information is required.');
       return;
     }
-    updateResolutionStatus(resolution.id, 'In Progress');
-    addComment(resolution.id, `⚠️ Request for More Information: ${requestMoreInfoNote}`);
-    setRequestMoreInfoNote('');
-    setShowRequestMoreInfo(false);
+
+    const finalizeRequestMoreInfo = (fileUrl?: string) => {
+      const minutesLabel = committeeMinutesDocName.trim() || selectedCommitteeMinutesFile?.name || '';
+
+      if (selectedCommitteeMinutesFile && fileUrl) {
+        addDocument(resolution.id, {
+          name: minutesLabel ? (minutesLabel.startsWith('Implementation Committee Minutes:') ? minutesLabel : `Implementation Committee Minutes: ${minutesLabel}`) : selectedCommitteeMinutesFile.name,
+          fileName: selectedCommitteeMinutesFile.name,
+          description: 'Implementation Committee Meeting Minutes',
+          categoryId: 'cat3',
+          url: fileUrl,
+        });
+      }
+
+      updateResolutionStatus(resolution.id, 'In Progress', {
+        committeeRemarks: committeeRemarksText.trim() || resolution.committeeRemarks,
+        committeeMinutesDocName: minutesLabel ? (minutesLabel.startsWith('Implementation Committee Minutes:') ? minutesLabel : `Implementation Committee Minutes: ${minutesLabel}`) : resolution.committeeMinutesDocName,
+        committeeMinutesUrl: fileUrl || resolution.committeeMinutesUrl,
+      });
+
+      addComment(
+        resolution.id,
+        `⚠️ Implementation Committee Evaluation: IMPLEMENTATION NOT SATISFACTORY / Additional Information Requested.\nReason / Directives: ${requestMoreInfoNote}${committeeRemarksText.trim() ? `\nCommittee Remarks: ${committeeRemarksText.trim()}` : ''}${minutesLabel ? `\nAttached Minutes: ${minutesLabel}` : ''}`
+      );
+
+      setRequestMoreInfoNote('');
+      setShowRequestMoreInfo(false);
+      setSelectedCommitteeMinutesFile(null);
+      setCommitteeMinutesDocName('');
+    };
+
+    if (selectedCommitteeMinutesFile) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        finalizeRequestMoreInfo(reader.result as string);
+      };
+      reader.readAsDataURL(selectedCommitteeMinutesFile);
+    } else {
+      finalizeRequestMoreInfo();
+    }
   };
 
   const handleSaveCommitteeRemarksAndMinutes = (e: React.FormEvent) => {
@@ -379,6 +450,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
   // Derived state for permissions
   const isSysAdmin = currentUser?.role && ['System Administrator', 'ICT Director'].includes(currentUser.role);
   const isClerkOrAssistant = currentUser?.role && ['County Assembly Clerk', 'Assistant County Assembly Clerk'].includes(currentUser.role);
+  const isCommitteeClerk = currentUser?.role && ['Committee Clerk', 'Assistant Committee Clerk', 'County Assembly Clerk', 'Assistant County Assembly Clerk'].includes(currentUser.role);
   const isCountySecretary = currentUser?.role && ['County Secretary', "County Secretary's Assistant"].includes(currentUser.role);
   const isExecutiveUser = currentUser?.role && ['CECM', 'CCO', 'Director', 'County Secretary', "County Secretary's Assistant"].includes(currentUser.role);
 
@@ -391,7 +463,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
   const canUploadEvidence = (isExecutiveUser || isSysAdmin) && resolution.status === 'In Progress';
   const canSubmitReport = (isExecutiveUser || isSysAdmin) && resolution.status === 'In Progress';
   
-  const canReviewReport = (isClerkOrAssistant || isSysAdmin) && resolution.status === 'Pending Report Review';
+  const canReviewReport = (isCommitteeClerk || isSysAdmin) && resolution.status === 'Pending Report Review';
   
   const isLocked = resolution.status === 'Done' && !isSysAdmin;
 
@@ -603,6 +675,161 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
           </div>
         </div>
       )}
+
+      {/* Documents */}
+      <div className="bg-white shadow-sm rounded-xl border border-slate-200">
+        <div className="px-4 py-5 border-b border-slate-200 sm:px-6 flex justify-between items-center bg-slate-50 rounded-t-xl">
+          <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Documents</h3>
+          {!showUpload && (
+            <button 
+              onClick={() => setShowUpload(true)}
+              className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none cursor-pointer"
+            >
+              <Upload className="mr-2 h-4 w-4 text-gray-500" />
+              Upload
+            </button>
+          )}
+        </div>
+        <div className="px-4 py-5 sm:p-6">
+          {showUpload ? (
+            <form onSubmit={handleUploadSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Document Description / Note <span className="text-xs text-gray-400 font-normal">(Optional - describes document contents)</span>
+                </label>
+                <input
+                  type="text"
+                  value={uploadData.name}
+                  onChange={(e) => setUploadData({ ...uploadData, name: e.target.value })}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm bg-white"
+                  placeholder="e.g. Official Hansard Scan, Signed Resolution Minutes..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Category</label>
+                <select
+                  required
+                  value={uploadData.categoryId}
+                  onChange={(e) => setUploadData({ ...uploadData, categoryId: e.target.value })}
+                  className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
+                >
+                  <option value="">Select Category...</option>
+                  {docCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Attach Document File</label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-white">
+                  <div className="space-y-1 text-center">
+                    <Upload className={`mx-auto h-12 w-12 ${selectedFile ? 'text-green-500' : 'text-gray-400'}`} />
+                    <div className="flex text-sm text-gray-600 justify-center">
+                      <label
+                        htmlFor="file-upload"
+                        className="relative cursor-pointer bg-white rounded-md font-medium text-orange-600 hover:text-orange-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-orange-500"
+                      >
+                        <span>{selectedFile ? 'Change file' : 'Upload a file'}</span>
+                        <input 
+                          id="file-upload" 
+                          name="file-upload" 
+                          type="file" 
+                          className="sr-only" 
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              setSelectedFile(file);
+                            }
+                          }}
+                        />
+                      </label>
+                      {!selectedFile && <p className="pl-1 text-slate-500">or drag & drop</p>}
+                    </div>
+                    {selectedFile ? (
+                      <div className="flex items-center justify-center gap-2 mt-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 max-w-full flex-wrap">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
+                        <span className="break-all break-words text-center min-w-0">{selectedFile.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono font-normal shrink-0">
+                          ({(selectedFile.size / 1024).toFixed(0)} KB)
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">Supports PDF, DOCX, XLSX, Images & Any Document Format</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowUpload(false)}
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 cursor-pointer"
+                >
+                  Upload Document
+                </button>
+              </div>
+            </form>
+          ) : (
+            <>
+              {resolution.documents.length > 0 ? (
+                <ul className="border border-gray-200 rounded-md divide-y divide-gray-200">
+                  {resolution.documents.map((doc) => {
+                    const displayName = doc.fileName || doc.name;
+                    const desc = doc.description || (doc.name !== doc.fileName ? doc.name : '');
+                    return (
+                      <li key={doc.id} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
+                        <div className="w-0 flex-1 flex flex-col">
+                          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                            <FileText className="flex-shrink-0 h-5 w-5 text-orange-500 shrink-0" />
+                            <span className="font-bold text-gray-900 break-all break-words min-w-0">{displayName}</span>
+                            {displayName.includes('.') && (
+                              <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded font-bold shrink-0 border border-slate-200">
+                                {displayName.split('.').pop()}
+                              </span>
+                            )}
+                          </div>
+                          {desc && desc !== displayName && (
+                            <p className="ml-7 text-xs text-slate-600 mt-0.5 font-medium">
+                              <span className="text-slate-400 font-normal">Description: </span>{desc}
+                            </p>
+                          )}
+                          <span className="ml-7 text-[11px] text-gray-400 mt-0.5">
+                            {docCategories.find(c => c.id === doc.categoryId)?.name || 'Document'} • Uploaded {format(new Date(doc.uploadedAt), 'MMM d, yyyy')} {doc.uploadedBy ? `by ${doc.uploadedBy}` : ''}
+                          </span>
+                        </div>
+                        <div className="ml-4 flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadFile(displayName, doc.url, displayName)}
+                            className="font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer focus:outline-none text-xs bg-orange-50 px-2.5 py-1 rounded border border-orange-200"
+                          >
+                            Download
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <div className="text-center py-6">
+                  <FileText className="mx-auto h-12 w-12 text-gray-300" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No documents</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Upload Hansards, Reports, or official Resolution scans.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       {(canUploadEvidence || canSubmitReport || (resolution.executiveUpdates && resolution.executiveUpdates.length > 0)) && (
         <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-6 space-y-5">
@@ -1088,56 +1315,56 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
       {canReviewReport && (
         <div className="bg-white border border-indigo-200 p-6 shadow-sm rounded-xl space-y-4">
           <div className="flex items-start gap-3">
-            <ShieldCheck className="h-6 w-6 text-indigo-600" />
+            <ShieldCheck className="h-6 w-6 text-indigo-600 shrink-0 mt-0.5" />
             <div>
-              <h3 className="text-sm font-bold text-indigo-950 uppercase tracking-wide">Review Implementation Report</h3>
-              <p className="text-xs text-indigo-700 mt-1">
-                An Executive department has submitted an implementation report. Please review the reports and either accept them (closing the resolution) or bounce back to In Progress with more information requested.
+              <h3 className="text-sm font-bold text-indigo-950 uppercase tracking-wide">Implementation Committee Evaluation & Determination</h3>
+              <p className="text-xs text-indigo-700 mt-1 leading-relaxed">
+                Departmental implementation reports have been submitted. The Implementation Committee evaluates if the implementation was successful, records committee remarks and attaches minutes, and determines whether implementation is satisfactory or requires additional information.
               </p>
             </div>
           </div>
 
           {!showRequestMoreInfo ? (
-            <div className="flex gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
                 onClick={() => setShowRequestMoreInfo(true)}
-                className="px-4 py-2 text-xs font-semibold text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg cursor-pointer"
+                className="px-4 py-2.5 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg cursor-pointer flex items-center justify-center gap-2"
               >
-                Bounce Back (Request More Info)
+                <span>⚠️ Implementation Not Satisfactory (Request Additional Info)</span>
               </button>
               <button
                 onClick={handleAcceptReport}
-                className="px-4 py-2 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg cursor-pointer"
+                className="px-4 py-2.5 text-xs font-semibold text-white bg-green-700 hover:bg-green-800 rounded-lg cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
               >
-                Accept & Conclude Resolution
+                <span>✓ Implementation Satisfactory (Accept & Conclude)</span>
               </button>
             </div>
           ) : (
-            <form onSubmit={handleRequestMoreInfo} className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+            <form onSubmit={handleRequestMoreInfo} className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Note / Request Reason (Required)</label>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">Committee Directive / Reason for Additional Information (Required)</label>
                 <textarea
                   required
                   rows={3}
                   value={requestMoreInfoNote}
                   onChange={(e) => setRequestMoreInfoNote(e.target.value)}
-                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-orange-500"
-                  placeholder="Detail exactly what additional information, documentation, or action is required..."
+                  className="mt-1 block w-full border border-gray-300 rounded-lg py-2 px-3 text-sm focus:outline-none focus:ring-amber-500 bg-white"
+                  placeholder="Detail why implementation was not satisfactory and what specific additional information, evidence, or action is required from the department..."
                 />
               </div>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setShowRequestMoreInfo(false)}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 cursor-pointer"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-700 hover:bg-slate-100 bg-white border border-slate-200 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-amber-700 hover:bg-amber-800 cursor-pointer"
                 >
-                  Send Request & Reopen
+                  Submit Committee Request & Return to In Progress
                 </button>
               </div>
             </form>
@@ -1156,161 +1383,6 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
       )}
 
       <div className="space-y-6">
-        {/* Documents */}
-        <div className="bg-white shadow-sm rounded-xl border border-slate-200">
-          <div className="px-4 py-5 border-b border-slate-200 sm:px-6 flex justify-between items-center bg-slate-50 rounded-t-xl">
-            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">Documents</h3>
-            {!showUpload && (
-              <button 
-                onClick={() => setShowUpload(true)}
-                className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
-              >
-                <Upload className="mr-2 h-4 w-4 text-gray-500" />
-                Upload
-              </button>
-            )}
-          </div>
-          <div className="px-4 py-5 sm:p-6">
-            {showUpload ? (
-              <form onSubmit={handleUploadSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    Document Description / Note <span className="text-xs text-gray-400 font-normal">(Optional - describes document contents)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={uploadData.name}
-                    onChange={(e) => setUploadData({ ...uploadData, name: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm bg-white"
-                    placeholder="e.g. Official Hansard Scan, Signed Resolution Minutes..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Category</label>
-                  <select
-                    required
-                    value={uploadData.categoryId}
-                    onChange={(e) => setUploadData({ ...uploadData, categoryId: e.target.value })}
-                    className="mt-1 block w-full bg-white border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-orange-500 focus:border-orange-500 sm:text-sm"
-                  >
-                    <option value="">Select Category...</option>
-                    {docCategories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Attach Document File</label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md bg-white">
-                    <div className="space-y-1 text-center">
-                      <Upload className={`mx-auto h-12 w-12 ${selectedFile ? 'text-green-500' : 'text-gray-400'}`} />
-                      <div className="flex text-sm text-gray-600 justify-center">
-                        <label
-                          htmlFor="file-upload"
-                          className="relative cursor-pointer bg-white rounded-md font-medium text-orange-600 hover:text-orange-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-orange-500"
-                        >
-                          <span>{selectedFile ? 'Change file' : 'Upload a file'}</span>
-                          <input 
-                            id="file-upload" 
-                            name="file-upload" 
-                            type="file" 
-                            className="sr-only" 
-                            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.png,.jpg,.jpeg,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                setSelectedFile(file);
-                              }
-                            }}
-                          />
-                        </label>
-                        {!selectedFile && <p className="pl-1 text-slate-500">or drag & drop</p>}
-                      </div>
-                      {selectedFile ? (
-                        <div className="flex items-center justify-center gap-2 mt-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 max-w-full flex-wrap">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shrink-0" />
-                          <span className="break-all break-words text-center min-w-0">{selectedFile.name}</span>
-                          <span className="text-[10px] text-slate-500 font-mono font-normal shrink-0">
-                            ({(selectedFile.size / 1024).toFixed(0)} KB)
-                          </span>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-500">Supports PDF, DOCX, XLSX, Images & Any Document Format</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowUpload(false)}
-                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
-                  >
-                    Upload Document
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <>
-                {resolution.documents.length > 0 ? (
-                  <ul className="border border-gray-200 rounded-md divide-y divide-gray-200">
-                    {resolution.documents.map((doc) => {
-                      const displayName = doc.fileName || doc.name;
-                      const desc = doc.description || (doc.name !== doc.fileName ? doc.name : '');
-                      return (
-                        <li key={doc.id} className="pl-3 pr-4 py-3 flex items-center justify-between text-sm">
-                          <div className="w-0 flex-1 flex flex-col">
-                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                              <FileText className="flex-shrink-0 h-5 w-5 text-orange-500 shrink-0" />
-                              <span className="font-bold text-gray-900 break-all break-words min-w-0">{displayName}</span>
-                              {displayName.includes('.') && (
-                                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded font-bold shrink-0 border border-slate-200">
-                                  {displayName.split('.').pop()}
-                                </span>
-                              )}
-                            </div>
-                            {desc && desc !== displayName && (
-                              <p className="ml-7 text-xs text-slate-600 mt-0.5 font-medium">
-                                <span className="text-slate-400 font-normal">Description: </span>{desc}
-                              </p>
-                            )}
-                            <span className="ml-7 text-[11px] text-gray-400 mt-0.5">
-                              {docCategories.find(c => c.id === doc.categoryId)?.name || 'Document'} • Uploaded {format(new Date(doc.uploadedAt), 'MMM d, yyyy')} {doc.uploadedBy ? `by ${doc.uploadedBy}` : ''}
-                            </span>
-                          </div>
-                          <div className="ml-4 flex-shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadFile(displayName, doc.url, displayName)}
-                              className="font-medium text-orange-600 hover:text-orange-700 hover:underline cursor-pointer focus:outline-none text-xs bg-orange-50 px-2.5 py-1 rounded border border-orange-200"
-                            >
-                              Download
-                            </button>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="text-center py-6">
-                    <FileText className="mx-auto h-12 w-12 text-gray-300" />
-                    <h3 className="mt-2 text-sm font-medium text-gray-900">No documents</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Upload Hansards, Reports, or official Resolution scans.
-                    </p>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
         {/* Discussions */}
         <div className="bg-white shadow-sm rounded-xl border border-slate-200 flex flex-col h-[400px]">
           <div className="px-4 py-5 border-b border-slate-200 sm:px-6 bg-slate-50 rounded-t-xl">
