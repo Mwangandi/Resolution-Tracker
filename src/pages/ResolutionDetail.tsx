@@ -618,13 +618,13 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
 
           <div className="space-y-4">
             {canUploadEvidence && (
-              <div className="bg-orange-50/70 border border-orange-200 rounded-xl overflow-hidden shadow-2xs">
+              <div className="bg-white border border-orange-200 rounded-xl overflow-hidden shadow-2xs">
                 <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start sm:items-center">
                     <Activity className="h-5 w-5 text-orange-600 mr-2.5 shrink-0 mt-0.5 sm:mt-0" />
                     <div>
-                      <h4 className="text-sm font-bold text-orange-950">Upload Evidence & Status Update</h4>
-                      <p className="text-xs text-orange-800/90 mt-0.5">Add an ongoing implementation update or upload evidence files.</p>
+                      <h4 className="text-sm font-bold text-slate-900">Upload Evidence & Status Update</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Add an ongoing implementation update or upload evidence files.</p>
                     </div>
                   </div>
                   {!showExecReply && (
@@ -634,7 +634,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
                         setShowExecReply(true);
                         setShowSubmitReportForm(false);
                       }}
-                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-orange-800 bg-white border border-orange-300 hover:bg-orange-100/50 shadow-2xs cursor-pointer shrink-0"
+                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-orange-800 bg-white border border-orange-300 hover:bg-orange-50 shadow-2xs cursor-pointer shrink-0"
                     >
                       Add Update / Evidence
                     </button>
@@ -753,13 +753,13 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
             )}
 
             {canSubmitReport && (
-              <div className="bg-blue-50/70 border border-blue-200 rounded-xl overflow-hidden shadow-2xs">
+              <div className="bg-white border border-blue-200 rounded-xl overflow-hidden shadow-2xs">
                 <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start sm:items-center">
                     <FileText className="h-5 w-5 text-blue-600 mr-2.5 shrink-0 mt-0.5 sm:mt-0" />
                     <div>
-                      <h4 className="text-sm font-bold text-blue-950">Submit Implementation Reports</h4>
-                      <p className="text-xs text-blue-800/90 mt-0.5">Conclude implementation and forward a formal report to the Assembly for review.</p>
+                      <h4 className="text-sm font-bold text-slate-900">Submit Implementation Reports</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">Conclude implementation and forward a formal report to the Assembly for review.</p>
                     </div>
                   </div>
                   {!showSubmitReportForm && (
@@ -769,7 +769,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
                         setShowSubmitReportForm(true);
                         setShowExecReply(false);
                       }}
-                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-blue-800 bg-white border border-blue-300 hover:bg-blue-100/50 shadow-2xs cursor-pointer shrink-0"
+                      className="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-blue-800 bg-white border border-blue-300 hover:bg-blue-50 shadow-2xs cursor-pointer shrink-0"
                     >
                       Submit Reports
                     </button>
@@ -945,7 +945,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
 
         <div className="space-y-4">
           {(resolution.committeeRemarks || resolution.committeeMinutesDocName) && !showCommitteeModal && (
-            <div className="bg-purple-50/50 border border-purple-200 rounded-xl p-4 space-y-3">
+            <div className="bg-white border border-purple-200 rounded-xl p-4 space-y-3">
               {resolution.committeeRemarks && (
                 <div>
                   <span className="text-[11px] font-bold text-purple-900 uppercase tracking-wider block mb-1">Committee Remarks:</span>
@@ -974,7 +974,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
           )}
 
           {showCommitteeModal && (
-            <form onSubmit={handleSaveCommitteeRemarksAndMinutes} className="bg-purple-50/40 border border-purple-200 rounded-xl p-5 space-y-4">
+            <form onSubmit={handleSaveCommitteeRemarksAndMinutes} className="bg-white border border-purple-200 rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-purple-100 pb-2">
                 <h5 className="text-xs font-bold text-purple-900 uppercase tracking-wider">Record Committee Remarks & Attach Minutes</h5>
                 <button
@@ -1067,7 +1067,7 @@ export function ResolutionDetail({ id: propId }: { id?: string } = {}) {
           )}
 
           {!resolution.committeeRemarks && !resolution.committeeMinutesDocName && !showCommitteeModal && (
-            <div className="text-center py-6 bg-slate-50/70 border border-dashed border-slate-200 rounded-xl">
+            <div className="text-center py-6 bg-white border border-dashed border-slate-200 rounded-xl">
               <ShieldCheck className="h-8 w-8 text-purple-300 mx-auto mb-2" />
               <p className="text-xs text-slate-500 font-medium">No committee remarks or meeting minutes recorded yet.</p>
               <button
